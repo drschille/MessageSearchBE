@@ -7,16 +7,60 @@ kotlin = "2.1.20"
 kotlinxDatetime = "0.6.1"
 kotlinxSerializationJSON = "1.7.3"
 kotlinxCoroutines = "1.9.0"
+ktor = "3.0.0" # TODO: adjust if mismatch with Kotlin version
+exposed = "0.53.0"
+postgres = "42.7.4"
+flyway = "10.17.0"
+hikari = "5.1.0"
+logback = "1.5.6"
+testcontainers = "1.20.1"
 
 [libraries]
 kotlinGradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlinxDatetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 kotlinxSerialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJSON" }
 kotlinxCoroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
+ktorServerCore = { module = "io.ktor:ktor-server-core-jvm", version.ref = "ktor" }
+ktorServerNetty = { module = "io.ktor:ktor-server-netty-jvm", version.ref = "ktor" }
+ktorServerContentNegotiation = { module = "io.ktor:ktor-server-content-negotiation-jvm", version.ref = "ktor" }
+ktorSerializationKotlinxJson = { module = "io.ktor:ktor-serialization-kotlinx-json-jvm", version.ref = "ktor" }
+ktorServerAuth = { module = "io.ktor:ktor-server-auth-jvm", version.ref = "ktor" }
+ktorServerAuthJwt = { module = "io.ktor:ktor-server-auth-jwt-jvm", version.ref = "ktor" }
+ktorServerCallLogging = { module = "io.ktor:ktor-server-call-logging-jvm", version.ref = "ktor" }
+ktorServerOpenapi = { module = "io.ktor:ktor-server-openapi", version.ref = "ktor" }
+ktorServerSwagger = { module = "io.ktor:ktor-server-swagger", version.ref = "ktor" }
+ktorClientCore = { module = "io.ktor:ktor-client-core-jvm", version.ref = "ktor" }
+ktorClientApache = { module = "io.ktor:ktor-client-apache-jvm", version.ref = "ktor" }
+ktorServerMetricsMicrometer = { module = "io.ktor:ktor-server-metrics-micrometer", version.ref = "ktor" }
+logbackClassic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+exposedCore = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
+exposedDao = { module = "org.jetbrains.exposed:exposed-dao", version.ref = "exposed" }
+exposedJdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
+exposedKotlinDatetime = { module = "org.jetbrains.exposed:exposed-kotlin-datetime", version.ref = "exposed" }
+postgresDriver = { module = "org.postgresql:postgresql", version.ref = "postgres" }
+flywayCore = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
+hikariCP = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
+micrometerRegistryPrometheus = { module = "io.micrometer:micrometer-registry-prometheus", version = "1.12.6" }
+# Test
+ktorServerTests = { module = "io.ktor:ktor-server-tests-jvm", version.ref = "ktor" }
+testcontainersPostgres = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
 
 # Libraries can be bundled together for easier import
 [bundles]
 kotlinxEcosystem = ["kotlinxDatetime", "kotlinxSerialization", "kotlinxCoroutines"]
+ktorServer = [
+  "ktorServerCore",
+  "ktorServerNetty",
+  "ktorServerContentNegotiation",
+  "ktorSerializationKotlinxJson",
+  "ktorServerAuth",
+  "ktorServerAuthJwt",
+  "ktorServerCallLogging",
+  "ktorServerOpenapi",
+  "ktorServerSwagger",
+  "ktorServerMetricsMicrometer"
+]
+exposedAll = ["exposedCore", "exposedDao", "exposedJdbc", "exposedKotlinDatetime"]
 
 [plugins]
 kotlinPluginSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

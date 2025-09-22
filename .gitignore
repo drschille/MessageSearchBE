@@ -49,6 +49,8 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+/gradle/wrapper/gradle-wrapper.jar
+
 # BlueJ files
 *.ctxt
 

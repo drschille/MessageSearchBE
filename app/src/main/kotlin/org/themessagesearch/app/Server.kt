@@ -20,6 +20,8 @@ import org.themessagesearch.core.ports.*
 import org.themessagesearch.app.di.ServiceRegistry
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import io.ktor.server.plugins.callloging.*
+import io.ktor.server.plugins.statuspages.*
 
 fun main() {
     val config = ConfigLoader.load()
@@ -29,6 +31,16 @@ fun main() {
 
 fun Application.ktorModule(appConfig: AppConfig, services: ServiceRegistry.Registry) {
     install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; prettyPrint = false }) }
+    install(CallLogging) {
+        filter { call -> call.request.path() != "/health" && call.request.path() != "/metrics" }
+    }
+    install(StatusPages) {
+        exception<Throwable> { call: ApplicationCall, cause: Throwable ->
+            // TODO: integrate structured logging
+            this@ktorModule.environment.log.error("Unhandled exception", cause)
+            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (cause.message ?: "internal error")))
+        }
+    }
 
     val jwtCfg = appConfig.jwt
     install(Authentication) {

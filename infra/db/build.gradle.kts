@@ -4,8 +4,8 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":core"))
-    implementation(libs.bundles.exposedAll)
+    api(project(":core"))
+    api(libs.bundles.exposedAll)
     implementation(libs.hikariCP)
     implementation(libs.flywayCore)
     implementation(libs.postgresDriver)

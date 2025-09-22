@@ -24,11 +24,11 @@ import com.auth0.jwt.algorithms.Algorithm
 
 fun main() {
     val config = ConfigLoader.load()
-    val registry = ServiceRegistry.init(config)
-    embeddedServer(Netty, port = 8080) { ktorModule(config, registry) }.start(wait = true)
+    val services = ServiceRegistry.init(config)
+    embeddedServer(Netty, port = 8080) { ktorModule(config, services) }.start(wait = true)
 }
 
-fun Application.ktorModule(appConfig: AppConfig, registry: ServiceRegistry.Registry) {
+fun Application.ktorModule(appConfig: AppConfig, services: ServiceRegistry.Registry) {
     install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; prettyPrint = false }) }
     install(CallLogging)
 
@@ -54,13 +54,13 @@ fun Application.ktorModule(appConfig: AppConfig, registry: ServiceRegistry.Regis
     routing {
         get("/health") { call.respond(mapOf("status" to "ok")) }
         get("/metrics") { call.respond(prometheusRegistry.scrape()) }
-        get("/openapi") { call.respond(registry.openApiSpec) }
+        get("/openapi") { call.respond(services.openApiSpec) }
 
         authenticate("auth-jwt") {
-            documentRoutes(registry.documentRepo)
-            searchRoutes(registry.searchService, appConfig.search)
-            answerRoutes(registry.answerService, appConfig.search)
-            ingestRoutes(registry.backfillService)
+            documentRoutes(services.documentRepo)
+            searchRoutes(services.searchService, appConfig.search)
+            answerRoutes(services.answerService, appConfig.search)
+            ingestRoutes(services.backfillService)
         }
     }
 }

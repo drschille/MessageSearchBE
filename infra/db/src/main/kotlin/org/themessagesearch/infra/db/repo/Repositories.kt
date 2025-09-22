@@ -2,7 +2,6 @@ package org.themessagesearch.infra.db.repo
 
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.themessagesearch.core.model.Document
 import org.themessagesearch.core.model.DocumentId
 import org.themessagesearch.core.ports.DocumentRepository
@@ -57,15 +56,15 @@ class ExposedDocumentRepository : DocumentRepository {
 class ExposedEmbeddingRepository : EmbeddingRepository {
     override suspend fun upsertEmbedding(docId: DocumentId, vector: FloatArray) {
         transaction {
-            val conn = TransactionManager.current().connection.jdbcConnection
             val vectorLiteral = vector.joinToString(prefix = "[", postfix = "]") { it.toString() }
-            conn.prepareStatement(
-                "INSERT INTO doc_embeddings(doc_id, vec) VALUES (?::uuid, ?::vector) ON CONFLICT (doc_id) DO UPDATE SET vec = EXCLUDED.vec"
-            ).use { ps ->
-                ps.setString(1, docId.value)
-                ps.setString(2, vectorLiteral)
-                ps.executeUpdate()
-            }
+            // NOTE: Using string interpolation for simplicity; docId validated as UUID, vector components are numeric.
+            // TODO: Replace with proper prepared statement support for pgvector when adopting a custom Exposed column type.
+            val sql = """
+                INSERT INTO doc_embeddings(doc_id, vec)
+                VALUES ('${docId.value}'::uuid, '${vectorLiteral}'::vector)
+                ON CONFLICT (doc_id) DO UPDATE SET vec = EXCLUDED.vec
+            """.trimIndent()
+            exec(sql)
         }
     }
 

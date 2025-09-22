@@ -12,16 +12,15 @@ import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
-import io.ktor.server.plugins.openapi.*
-import io.ktor.server.plugins.swagger.*
 import io.ktor.server.metrics.micrometer.*
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import kotlinx.serialization.json.Json
 import org.themessagesearch.core.model.*
 import org.themessagesearch.core.ports.*
-import org.themessagesearch.infra.db.DatabaseFactory
 import org.themessagesearch.app.di.ServiceRegistry
+import com.auth0.jwt.JWT
+import com.auth0.jwt.algorithms.Algorithm
 
 fun main() {
     val config = ConfigLoader.load()
@@ -33,13 +32,19 @@ fun Application.ktorModule(appConfig: AppConfig, registry: ServiceRegistry.Regis
     install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; prettyPrint = false }) }
     install(CallLogging)
 
-    val jwt = appConfig.jwt
+    val jwtCfg = appConfig.jwt
     install(Authentication) {
         jwt("auth-jwt") {
-            verifier(io.ktor.util.internal.toByteArray(jwt.secret)) // TODO use proper JWT algorithm & library (e.g., Auth0)
+            val algorithm = Algorithm.HMAC256(jwtCfg.secret)
+            verifier(
+                JWT.require(algorithm)
+                    .withIssuer(jwtCfg.issuer)
+                    .build()
+            )
             validate { credentials ->
-                if (credentials.payload.audience.contains(jwt.audience)) JWTPrincipal(credentials.payload) else null
+                if (credentials.payload.audience.contains(jwtCfg.audience)) JWTPrincipal(credentials.payload) else null
             }
+            challenge { _, _ -> call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "invalid or missing token")) }
         }
     }
 
@@ -49,21 +54,7 @@ fun Application.ktorModule(appConfig: AppConfig, registry: ServiceRegistry.Regis
     routing {
         get("/health") { call.respond(mapOf("status" to "ok")) }
         get("/metrics") { call.respond(prometheusRegistry.scrape()) }
-        // Minimal OpenAPI placeholder
-        get("/openapi") {
-            call.respond(mapOf(
-                "openapi" to "3.0.0",
-                "info" to mapOf("title" to "MessageSearch API", "version" to "0.1.0"),
-                "paths" to mapOf(
-                    "/v1/documents" to mapOf("post" to mapOf("summary" to "Create document")),
-                    "/v1/documents/{id}" to mapOf("get" to mapOf("summary" to "Get document")),
-                    "/v1/search" to mapOf("post" to mapOf("summary" to "Hybrid search")),
-                    "/v1/answer" to mapOf("post" to mapOf("summary" to "RAG answer")),
-                    "/v1/ingest/embed" to mapOf("post" to mapOf("summary" to "Backfill embeddings"))
-                )
-            ))
-        }
-        swaggerUI(path = "swagger", swaggerFile = "openapi")
+        get("/openapi") { call.respond(registry.openApiSpec) }
 
         authenticate("auth-jwt") {
             documentRoutes(registry.documentRepo)
@@ -112,4 +103,3 @@ private fun Route.ingestRoutes(backfill: EmbeddingBackfillService) {
         call.respond(mapOf("processed" to processed))
     }
 }
-

@@ -22,6 +22,7 @@ dependencies {
     implementation(libs.kotlinxSerialization)
     implementation(libs.micrometerRegistryPrometheus)
     implementation(libs.snakeYaml)
+    implementation(libs.javaJwt)
     testImplementation(kotlin("test"))
     testImplementation(libs.ktorServerTests)
 }

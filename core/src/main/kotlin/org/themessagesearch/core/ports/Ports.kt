@@ -3,13 +3,14 @@ package org.themessagesearch.core.ports
 import org.themessagesearch.core.model.*
 
 interface DocumentRepository {
-    suspend fun insert(document: Document): Unit
+    suspend fun insert(document: Document)
     suspend fun findById(id: DocumentId): Document?
     suspend fun listIdsMissingEmbedding(limit: Int): List<DocumentId>
 }
 
 interface EmbeddingRepository {
     suspend fun upsertEmbedding(docId: DocumentId, vector: FloatArray)
+    suspend fun hasEmbedding(docId: DocumentId): Boolean
 }
 
 interface HybridSearchService {
@@ -28,3 +29,6 @@ interface AnswerService {
     suspend fun answer(query: String, topK: Int, weights: HybridWeights): AnswerResponse
 }
 
+interface EmbeddingBackfillService {
+    suspend fun backfill(batchSize: Int): Int
+}

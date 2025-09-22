@@ -3,9 +3,9 @@
 # https://docs.gradle.org/current/userguide/platforms.html#sub::toml-dependencies-format
 
 [versions]
-kotlin = "2.1.20"
+kotlin = "2.2.20"
 kotlinxDatetime = "0.6.1"
-kotlinxSerializationJSON = "1.7.3"
+kotlinxSerializationJSON = "1.9.0"
 kotlinxCoroutines = "1.9.0"
 ktor = "2.3.11" # TODO: adjust if mismatch with Kotlin version
 exposed = "0.53.0"
@@ -15,6 +15,7 @@ hikari = "5.1.0"
 logback = "1.5.6"
 testcontainers = "1.20.1"
 snakeyaml = "2.3"
+javaJwt = "4.4.0"
 
 [libraries]
 kotlinGradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
@@ -43,6 +44,7 @@ flywayCore = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 hikariCP = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
 micrometerRegistryPrometheus = { module = "io.micrometer:micrometer-registry-prometheus", version = "1.12.6" }
 snakeYaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
+javaJwt = { module = "com.auth0:java-jwt", version.ref = "javaJwt" }
 # Test
 ktorServerTests = { module = "io.ktor:ktor-server-tests-jvm", version.ref = "ktor" }
 testcontainersPostgres = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }

@@ -21,6 +21,7 @@ dependencies {
     implementation(libs.postgresDriver)
     implementation(libs.kotlinxSerialization)
     implementation(libs.micrometerRegistryPrometheus)
+    implementation(libs.snakeYaml)
     testImplementation(kotlin("test"))
     testImplementation(libs.ktorServerTests)
 }

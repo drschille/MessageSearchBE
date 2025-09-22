@@ -16,6 +16,7 @@ logback = "1.5.13"
 testcontainers = "1.20.1"
 snakeyaml = "2.3"
 javaJwt = "4.4.0"
+micrometerPrometheus = "1.12.6"
 
 [libraries]
 kotlinGradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
@@ -42,7 +43,7 @@ exposedKotlinDatetime = { module = "org.jetbrains.exposed:exposed-kotlin-datetim
 postgresDriver = { module = "org.postgresql:postgresql", version.ref = "postgres" }
 flywayCore = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 hikariCP = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
-micrometerRegistryPrometheus = { module = "io.micrometer:micrometer-registry-prometheus", version = "1.12.6" }
+micrometerRegistryPrometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometerPrometheus" }
 snakeYaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 javaJwt = { module = "com.auth0:java-jwt", version.ref = "javaJwt" }
 # Test

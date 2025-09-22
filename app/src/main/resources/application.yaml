@@ -1,0 +1,26 @@
+ktor:
+  deployment:
+    port: 8080
+  application:
+    modules: [com.example.AppKt.module]
+
+db:
+  url: jdbc:postgresql://localhost:5432/app
+  user: postgres
+  password: postgres
+
+ai:
+  provider: openai
+  apiKey: ${OPENAI_API_KEY}
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:dev-secret}
+    issuer: app
+    audience: app-clients
+
+search:
+  k: 200
+  weights:
+    text: 0.35
+    vector: 0.65

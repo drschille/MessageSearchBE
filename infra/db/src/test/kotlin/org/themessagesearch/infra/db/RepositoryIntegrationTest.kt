@@ -78,5 +78,32 @@ class RepositoryIntegrationTest {
         docs.forEach { id -> assertTrue(embRepo.hasEmbedding(id.id)) }
     }
 
+    @Test
+    fun `indexes created`() = runBlocking {
+        assumeTrue(postgres != null)
+        val conn = DatabaseFactory.getDataSource().connection
+        conn.use { c ->
+            fun hasIndex(table: String, idx: String): Boolean = c.prepareStatement(
+                "SELECT 1 FROM pg_indexes WHERE tablename = ? AND indexname = ?"
+            ).use { ps ->
+                ps.setString(1, table)
+                ps.setString(2, idx)
+                ps.executeQuery().next()
+            }
+            assertTrue(hasIndex("documents", "idx_documents_tsv"), "Missing idx_documents_tsv")
+            assertTrue(hasIndex("doc_embeddings", "idx_embeddings_vec"), "Missing idx_embeddings_vec")
+        }
+    }
+
+    @Test
+    fun `dimension mismatch throws`() = runBlocking {
+        assumeTrue(postgres != null)
+        val doc = Document(DocumentId.random(), "Dim", "Mismatch")
+        docRepo.insert(doc)
+        val bad = FloatArray(10) { 0f }
+        val ex = assertThrows<IllegalArgumentException> { runBlocking { embRepo.upsertEmbedding(doc.id, bad) } }
+        assertTrue(ex.message!!.contains("Vector length"))
+    }
+
     private fun randomVector(): FloatArray = FloatArray(1536) { Random.nextFloat() }
 }

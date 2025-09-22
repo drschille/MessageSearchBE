@@ -58,12 +58,17 @@ class ExposedDocumentRepository : DocumentRepository {
 }
 
 class ExposedEmbeddingRepository : EmbeddingRepository {
+    private val dim = 1536
+    private fun requireDim(vector: FloatArray) = require(vector.size == dim) { "Vector length ${vector.size} != $dim" }
+
     override suspend fun upsertEmbedding(docId: DocumentId, vector: FloatArray) {
+        requireDim(vector)
         transaction { exec(singleUpsertSql(docId, vector)) }
     }
 
     override suspend fun batchUpsertEmbeddings(vectors: Map<DocumentId, FloatArray>) {
         if (vectors.isEmpty()) return
+        vectors.values.forEach { requireDim(it) }
         transaction {
             // Use a batch of VALUES clauses to minimize round trips.
             val valuesClauses = buildString {

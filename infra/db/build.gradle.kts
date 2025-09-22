@@ -10,7 +10,10 @@ dependencies {
     implementation(libs.flywayCore)
     implementation(libs.postgresDriver)
     implementation(libs.kotlinxSerialization)
-    testImplementation(kotlin("test"))
-    testImplementation(libs.testcontainersPostgres)
-}
 
+    testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinxCoroutines)
+    testImplementation(libs.testcontainersPostgres)
+    testImplementation(libs.testcontainersCore)
+    testImplementation(libs.testcontainersJunit)
+}

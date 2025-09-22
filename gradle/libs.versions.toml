@@ -48,6 +48,8 @@ javaJwt = { module = "com.auth0:java-jwt", version.ref = "javaJwt" }
 # Test
 ktorServerTests = { module = "io.ktor:ktor-server-tests-jvm", version.ref = "ktor" }
 testcontainersPostgres = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
+testcontainersCore = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
+testcontainersJunit = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
 
 # Libraries can be bundled together for easier import
 [bundles]

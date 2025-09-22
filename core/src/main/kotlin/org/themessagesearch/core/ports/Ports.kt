@@ -10,6 +10,7 @@ interface DocumentRepository {
 
 interface EmbeddingRepository {
     suspend fun upsertEmbedding(docId: DocumentId, vector: FloatArray)
+    suspend fun batchUpsertEmbeddings(vectors: Map<DocumentId, FloatArray>)
     suspend fun hasEmbedding(docId: DocumentId): Boolean
 }
 

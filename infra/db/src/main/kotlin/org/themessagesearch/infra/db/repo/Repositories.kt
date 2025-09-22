@@ -1,67 +1,79 @@
 package org.themessagesearch.infra.db.repo
 
+import org.jetbrains.exposed.dao.id.EntityID
+import org.jetbrains.exposed.dao.id.UUIDTable
+import org.jetbrains.exposed.dao.UUIDEntity
+import org.jetbrains.exposed.dao.UUIDEntityClass
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.themessagesearch.core.model.Document
 import org.themessagesearch.core.model.DocumentId
 import org.themessagesearch.core.ports.DocumentRepository
 import org.themessagesearch.core.ports.EmbeddingRepository
+import java.util.UUID
 
-object DocumentsTable : Table("documents") {
-    val id = uuid("id")
+// Documents table using DAO API for cleaner mapping.
+object DocumentsTable : UUIDTable("documents") {
     val title = text("title")
     val body = text("body")
-    // tsv column is generated, no need to declare (would require custom expression)
-    override val primaryKey = PrimaryKey(id)
+    // tsvector column is generated in DB migration; not mapped here.
 }
 
+class DocumentEntity(id: EntityID<UUID>) : UUIDEntity(id) {
+    companion object : UUIDEntityClass<DocumentEntity>(DocumentsTable)
+    var title by DocumentsTable.title
+    var body by DocumentsTable.body
+}
+
+// Embeddings table (pgvector); we don't define vec column (unsupported natively in Exposed yet), use raw SQL.
 object DocEmbeddingsTable : Table("doc_embeddings") {
     val docId = uuid("doc_id")
-    // vector column not represented (pgvector); we store raw FloatArray through SQL parameter in repository implementation
     override val primaryKey = PrimaryKey(docId)
 }
 
 class ExposedDocumentRepository : DocumentRepository {
     override suspend fun insert(document: Document) {
         transaction {
-            DocumentsTable.insert {
-                it[id] = java.util.UUID.fromString(document.id.value)
-                it[title] = document.title
-                it[body] = document.body
+            DocumentEntity.new(UUID.fromString(document.id.value)) {
+                title = document.title
+                body = document.body
             }
         }
     }
 
     override suspend fun findById(id: DocumentId): Document? = transaction {
-        DocumentsTable.select { DocumentsTable.id eq java.util.UUID.fromString(id.value) }
-            .limit(1).firstOrNull()?.let {
-                Document(
-                    id = id,
-                    title = it[DocumentsTable.title],
-                    body = it[DocumentsTable.body]
-                )
-            }
+        DocumentEntity.findById(UUID.fromString(id.value))?.let {
+            Document(id = DocumentId(it.id.value.toString()), title = it.title, body = it.body)
+        }
     }
 
     override suspend fun listIdsMissingEmbedding(limit: Int): List<DocumentId> = transaction {
-        // Left join to find documents without embedding
+        // LEFT JOIN to find documents without embedding
         (DocumentsTable leftJoin DocEmbeddingsTable)
             .slice(DocumentsTable.id)
             .select { DocEmbeddingsTable.docId.isNull() }
             .limit(limit)
-            .map { DocumentId(it[DocumentsTable.id].toString()) }
+            .map { DocumentId(it[DocumentsTable.id].value.toString()) }
     }
 }
 
 class ExposedEmbeddingRepository : EmbeddingRepository {
     override suspend fun upsertEmbedding(docId: DocumentId, vector: FloatArray) {
+        transaction { exec(singleUpsertSql(docId, vector)) }
+    }
+
+    override suspend fun batchUpsertEmbeddings(vectors: Map<DocumentId, FloatArray>) {
+        if (vectors.isEmpty()) return
         transaction {
-            val vectorLiteral = vector.joinToString(prefix = "[", postfix = "]") { it.toString() }
-            // NOTE: Using string interpolation for simplicity; docId validated as UUID, vector components are numeric.
-            // TODO: Replace with proper prepared statement support for pgvector when adopting a custom Exposed column type.
+            // Use a batch of VALUES clauses to minimize round trips.
+            val valuesClauses = buildString {
+                vectors.entries.forEachIndexed { idx, (docId, vec) ->
+                    if (idx > 0) append(',')
+                    append("('" + docId.value + "'::uuid, '" + vec.joinToString(prefix = "[", postfix = "]") { it.toString() } + "'::vector)")
+                }
+            }
             val sql = """
-                INSERT INTO doc_embeddings(doc_id, vec)
-                VALUES ('${docId.value}'::uuid, '${vectorLiteral}'::vector)
+                INSERT INTO doc_embeddings(doc_id, vec) VALUES $valuesClauses
                 ON CONFLICT (doc_id) DO UPDATE SET vec = EXCLUDED.vec
             """.trimIndent()
             exec(sql)
@@ -69,7 +81,15 @@ class ExposedEmbeddingRepository : EmbeddingRepository {
     }
 
     override suspend fun hasEmbedding(docId: DocumentId): Boolean = transaction {
-        DocEmbeddingsTable.select { DocEmbeddingsTable.docId eq java.util.UUID.fromString(docId.value) }
-            .empty().not()
+        !DocEmbeddingsTable.select { DocEmbeddingsTable.docId eq UUID.fromString(docId.value) }.empty()
+    }
+
+    private fun singleUpsertSql(docId: DocumentId, vector: FloatArray): String {
+        val literal = vector.joinToString(prefix = "[", postfix = "]") { it.toString() }
+        return """
+            INSERT INTO doc_embeddings(doc_id, vec)
+            VALUES ('${docId.value}'::uuid, '$literal'::vector)
+            ON CONFLICT (doc_id) DO UPDATE SET vec = EXCLUDED.vec
+        """.trimIndent()
     }
 }

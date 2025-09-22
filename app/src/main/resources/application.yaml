@@ -1,8 +1,8 @@
+# Application configuration
 ktor:
   deployment:
     port: 8080
-  application:
-    modules: [com.example.AppKt.module]
+  # modules removed; we bootstrap manually in main()
 
 db:
   url: jdbc:postgresql://localhost:5432/app
@@ -10,8 +10,8 @@ db:
   password: postgres
 
 ai:
-  provider: openai
-  apiKey: ${OPENAI_API_KEY}
+  provider: stub # TODO switch to openai/azure/openrouter
+  apiKey: ${AI_API_KEY:none}
 
 security:
   jwt:

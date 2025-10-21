@@ -19,6 +19,7 @@ data class AppConfig(
 )
 
 object ConfigLoader {
+    @Suppress("UNCHECKED_CAST")
     fun load(): AppConfig {
         val yamlStream = this::class.java.classLoader.getResourceAsStream("application.yaml")
             ?: error("application.yaml not found")

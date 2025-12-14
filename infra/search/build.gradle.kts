@@ -10,5 +10,6 @@ dependencies {
     implementation(libs.kotlinxSerialization)
     implementation(libs.exposedJdbc)
     testImplementation(kotlin("test"))
+    testImplementation(libs.testcontainersPostgres)
+    testImplementation(libs.testcontainersJunit)
 }
-

@@ -1,28 +1,31 @@
 package org.themessagesearch.infra.db.repo
 
+import kotlinx.datetime.Clock
+import kotlinx.datetime.toJavaInstant
+import kotlinx.datetime.toKotlinInstant
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.UUIDTable
-import org.jetbrains.exposed.dao.UUIDEntity
-import org.jetbrains.exposed.dao.UUIDEntityClass
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
+import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.themessagesearch.core.model.Document
+import org.themessagesearch.core.model.DocumentCreateRequest
 import org.themessagesearch.core.model.DocumentId
+import org.themessagesearch.core.model.SnapshotId
 import org.themessagesearch.core.ports.DocumentRepository
 import org.themessagesearch.core.ports.EmbeddingRepository
+import java.time.ZoneOffset
 import java.util.UUID
 
 // Documents table using DAO API for cleaner mapping.
 object DocumentsTable : UUIDTable("documents") {
     val title = text("title")
     val body = text("body")
+    val version = long("version")
+    val createdAt = timestampWithTimeZone("created_at")
+    val updatedAt = timestampWithTimeZone("updated_at")
     // tsvector column is generated in DB migration; not mapped here.
-}
-
-class DocumentEntity(id: EntityID<UUID>) : UUIDEntity(id) {
-    companion object : UUIDEntityClass<DocumentEntity>(DocumentsTable)
-    var title by DocumentsTable.title
-    var body by DocumentsTable.body
 }
 
 // Embeddings table (pgvector); we don't define vec column (unsupported natively in Exposed yet), use raw SQL.
@@ -32,29 +35,65 @@ object DocEmbeddingsTable : Table("doc_embeddings") {
 }
 
 class ExposedDocumentRepository : DocumentRepository {
-    override suspend fun insert(document: Document) {
-        transaction {
-            DocumentEntity.new(UUID.fromString(document.id.value)) {
-                title = document.title
-                body = document.body
+    override suspend fun create(request: DocumentCreateRequest): Document = transaction {
+        val now = Clock.System.now()
+        val offsetNow = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+        val id = DocumentsTable.insertAndGetId {
+            it[title] = request.title
+            it[body] = request.body
+            it[version] = 1
+            it[createdAt] = offsetNow
+            it[updatedAt] = offsetNow
+        }
+        DocumentsTable.select { DocumentsTable.id eq id }
+            .limit(1)
+            .first()
+            .toDocument()
+    }
+
+    override suspend fun findById(id: DocumentId, snapshotId: SnapshotId?): Document? = transaction {
+        // Snapshot support is forthcoming; ignore snapshotId for now.
+        DocumentsTable
+            .select { DocumentsTable.id eq EntityID(UUID.fromString(id.value), DocumentsTable) }
+            .limit(1)
+            .firstOrNull()
+            ?.toDocument()
+    }
+
+    override suspend fun fetchByIds(ids: Collection<DocumentId>): Map<DocumentId, Document> = transaction {
+        if (ids.isEmpty()) return@transaction emptyMap()
+        val uuidList = ids.map { UUID.fromString(it.value) }
+        DocumentsTable
+            .select { DocumentsTable.id inList uuidList }
+            .associate { row ->
+                val rowId = DocumentId(row[DocumentsTable.id].value.toString())
+                rowId to row.toDocument()
             }
-        }
     }
 
-    override suspend fun findById(id: DocumentId): Document? = transaction {
-        DocumentEntity.findById(UUID.fromString(id.value))?.let {
-            Document(id = DocumentId(it.id.value.toString()), title = it.title, body = it.body)
-        }
-    }
-
-    override suspend fun listIdsMissingEmbedding(limit: Int): List<DocumentId> = transaction {
-        // LEFT JOIN to find documents without embedding
-        (DocumentsTable leftJoin DocEmbeddingsTable)
+    override suspend fun listIdsMissingEmbedding(limit: Int, cursor: DocumentId?): List<DocumentId> = transaction {
+        val query = (DocumentsTable leftJoin DocEmbeddingsTable)
             .slice(DocumentsTable.id)
             .select { DocEmbeddingsTable.docId.isNull() }
+        cursor?.let {
+            val cursorUuid = UUID.fromString(it.value)
+            val entity = EntityID(cursorUuid, DocumentsTable)
+            query.andWhere { DocumentsTable.id greater entity }
+        }
+        query.orderBy(DocumentsTable.id to SortOrder.ASC)
             .limit(limit)
             .map { DocumentId(it[DocumentsTable.id].value.toString()) }
     }
+
+    private fun ResultRow.toDocument(): Document = Document(
+        id = DocumentId(this[DocumentsTable.id].value.toString()),
+        title = this[DocumentsTable.title],
+        body = this[DocumentsTable.body],
+        version = this[DocumentsTable.version],
+        snapshotId = null,
+        createdAt = this[DocumentsTable.createdAt].toInstant().toKotlinInstant(),
+        updatedAt = this[DocumentsTable.updatedAt].toInstant().toKotlinInstant()
+    )
 }
 
 class ExposedEmbeddingRepository : EmbeddingRepository {

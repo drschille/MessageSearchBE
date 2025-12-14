@@ -29,7 +29,6 @@
             <option value="$PROJECT_DIR$/infra/search" />
             <option value="$PROJECT_DIR$/test" />
             <option value="$PROJECT_DIR$/test/e2e" />
-            <option value="$PROJECT_DIR$/utils" />
           </set>
         </option>
       </GradleProjectSettings>

@@ -42,6 +42,8 @@ All transitions must fail if the caller lacks the required role, if the document
 - Every transition writes an audit record containing actor_id, timestamp, IP/fingerprint, reason, and the diff summary between previous and new snapshot IDs.
 - Inline comments and review notes are preserved even after publication for traceability.
 - Published snapshots are addressable by ID and timestamp; clients should use these IDs in citations.
+- Audit payload shape: `{ audit_id, document_id, from_state, to_state, actor_id, reason, created_at, snapshot_id?, diff_summary }`.
+- Expose `GET /v1/documents/{id}/audits?limit&cursor` for pagination; default limit 50, cursor-based to avoid drift.
 
 ## Collaboration & Conflict Handling
 - Edits occur via CRDT operations synced through the Collaboration module; server validates operations against access rules.
@@ -52,6 +54,7 @@ All transitions must fail if the caller lacks the required role, if the document
 - On SubmitForReview, notify assigned reviewers (webhook + email where configured).
 - If a review is idle for >48h, escalate to admins via webhook and mark the request as `stale`.
 - Publish events emit webhooks containing document ID, snapshot ID, and changelog summary for downstream consumers.
+- Webhook payload example: `{ event: "document.published", document_id, snapshot_id, title, summary, actor_id, published_at }`.
 
 ## API Expectations (minimum set)
 - `POST /v1/documents` – create Draft (requires Editor+)

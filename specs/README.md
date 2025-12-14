@@ -6,6 +6,7 @@ This directory collects the product and architectural specifications for Message
 - Capture the foundational principles that guide feature design and tradeoffs.
 - Describe the architecture, modules, and cross-cutting behaviors that all services must follow.
 - Provide authoritative workflows for collaboration, editing, and search so multiple teams can work independently without diverging expectations.
+- Anchor implementation tickets: each spec lists minimum viable endpoints, schemas, and acceptance criteria to keep delivery consistent across services.
 
 ## System Principles
 - **Editorial decisions are explicit.** Every change to content or metadata must be the result of a deliberate user action, not an implicit side effect.
@@ -36,6 +37,7 @@ The platform is organized into a small set of Kotlin modules backed by PostgreSQ
 - **Immutability.** Snapshots and audit entries are append-only; deprecations mark records inactive without deletion.
 - **Auditability.** Every state transition stores who did it, when, and why; include request IDs in logs and metrics for traceability.
 - **Observability.** Standard metrics (latency, errors, rate limits) and structured logs with sensitive fields redacted at boundaries.
+- **Idempotency.** Mutating endpoints should accept a client-supplied idempotency key and treat retries as no-ops when payloads match.
 
 ## How to Change the Specs
 1. Open a PR that edits the relevant `.md` file(s) in this directory.

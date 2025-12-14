@@ -15,6 +15,8 @@ Defines the architectural and editorial rules of the system.
 - Snapshots & Audit
 - Read & Search
 - Users & Roles
+- Documents & Languages
+- Database management
 
 ## Module Overview
 Links to each module spec with a short description.

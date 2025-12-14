@@ -1,6 +1,6 @@
 # Read & Search Specification
 
-Defines how documents are stored, indexed, and retrieved for readers and AI-assisted workflows.
+Defines how documents are stored, indexed, and retrieved for readers and AI-assisted workflows. Assume JSON over HTTP with OpenAPI documentation.
 
 ## 1. Goals
 - Serve structured document data via REST/JSON with consistent schemas and OpenAPI documentation.
@@ -27,13 +27,13 @@ Defines how documents are stored, indexed, and retrieved for readers and AI-assi
 - Optional: `snapshots(id UUID, document_id UUID, title TEXT, body TEXT, created_at TIMESTAMPTZ)` for immutable published views.
 
 ### Endpoints (minimum viable set)
-- `POST /v1/documents` – ingest a document; returns ID and version.
-- `GET /v1/documents/{id}` – fetch by ID (latest or specific snapshot via query).
-- `POST /v1/search` – body `{ query: String, limit?: Int, weights?: { text: Double, vector: Double } }`.
-- `POST /v1/answer` – body `{ query: String, limit?: Int }`; uses search then chat/generation.
-- `POST /v1/ingest/embed` – backfill embeddings for existing docs (admin only) with pagination and idempotency.
+- `POST /v1/documents` – ingest a document; returns `id`, `version`, and `snapshot_id` when published.
+- `GET /v1/documents/{id}` – fetch by ID (latest or specific snapshot via query); supports `fields` filter and `If-None-Match` for caching.
+- `POST /v1/search` – body `{ query: String, limit?: Int = 10, offset?: Int = 0, weights?: { text: Double, vector: Double } }`; returns total count, stable ordering, and raw scores.
+- `POST /v1/answer` – body `{ query: String, limit?: Int = 5 }`; uses search then chat/generation, returns citations of `document_id` + `snapshot_id` per supporting passage.
+- `POST /v1/ingest/embed` – backfill embeddings for existing docs (admin only) with pagination and idempotency via `cursor` and `batch_size`.
 
-JWT (HS256) is required for all endpoints. Rate limiting is enforced per token and IP.
+JWT (HS256) is required for all endpoints. Rate limiting is enforced per token and IP. All mutating endpoints are idempotent under a client-supplied `Idempotency-Key` header.
 
 ## 4. Migrations (Flyway)
 ```sql
@@ -87,19 +87,26 @@ ORDER BY final_score DESC
 LIMIT :limit;
 ```
 
-## 6. AI Providers
+## 6. API Schemas & Error Handling
+- **Document representation:** `{ id: UUID, title: String, body: String, snapshot_id?: UUID, version: Long, created_at: Instant, updated_at: Instant }`. Published snapshots always include `snapshot_id` and are immutable.
+- **Search response:** `{ total: Long, limit: Int, offset: Int, results: [ { id, snapshot_id?, title, snippet, text_score, vec_score, final_score } ] }`. `snippet` contains highlighted fragments with matched terms.
+- **Answer response:** `{ answer: String, citations: [ { document_id: UUID, snapshot_id?: UUID, score: Double, excerpt: String } ], tokens_used?: { prompt: Int, completion: Int } }`.
+- **Validation & errors:** 400 for malformed queries or missing weights, 401/403 for auth failures, 404 for missing documents, 409 when ETag/version preconditions fail, 429 for rate limits, 500 with correlation ID for unexpected errors.
+- **Pagination:** limit defaults to 10 and caps at 100; offset-based pagination is sufficient for this phase. Expose `next_offset` helper in responses for UI convenience.
+
+## 7. AI Providers
 - Start with embeddings; chat/generation optional for RAG answering.
 - Interfaces:
   - `EmbeddingClient.embed(texts: List<String>): List<FloatArray>`
   - `ChatClient.generate(prompt: String, context: List<String>): String`
 - Implementations: OpenAI/Azure/OpenRouter; injectable via configuration. Provide deterministic stub for tests.
 
-## 7. Performance & Observability
+## 8. Performance & Observability
 - Target: `POST /v1/search` p95 < 150ms for 50k documents on warm cache; log vector index settings for transparency.
 - Use ivfflat index with `lists = 200` as default; expose tuning via configuration.
 - Emit metrics: request latency, result count, embedding latency, and RAG token counts. Redact prompts before logging.
 
-## 8. Acceptance Criteria
+## 9. Acceptance Criteria
 - Documents can be ingested and fetched by ID (latest or specific snapshot).
 - Embedding backfill is idempotent and can resume via cursor/batch parameters.
 - Hybrid search returns relevant documents with stable ranking and includes raw scores.

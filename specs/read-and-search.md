@@ -118,7 +118,7 @@ combined AS (
 SELECT json_build_object(
   'total', (SELECT count(*) FROM combined),
   'results', (
-     SELECT json_agg(row_to_json(c.*))
+     SELECT coalesce(json_agg(row_to_json(c.*)), '[]'::json)
      FROM (
        SELECT * FROM combined ORDER BY final_score DESC LIMIT :limit OFFSET :offset
      ) AS c

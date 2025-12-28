@@ -4,7 +4,7 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.testcontainers.containers.PostgreSQLContainer
-import org.themessagesearch.core.model.Document
+import org.themessagesearch.core.model.DocumentCreateRequest
 import org.themessagesearch.core.model.DocumentId
 import org.themessagesearch.infra.db.repo.ExposedDocumentRepository
 import org.themessagesearch.infra.db.repo.ExposedEmbeddingRepository
@@ -45,8 +45,7 @@ class RepositoryIntegrationTest {
     fun `migration V1 created tables`() = runBlocking {
         assumeTrue(postgres != null)
         // Simple sanity: insert + select to prove tables exist
-        val doc = Document(DocumentId.random(), "Migrate", "Check tables")
-        docRepo.insert(doc)
+        val doc = docRepo.create(DocumentCreateRequest("Migrate", "Check tables"))
         val fetched = docRepo.findById(doc.id)
         assertNotNull(fetched)
         assertEquals(doc.title, fetched!!.title)
@@ -55,8 +54,7 @@ class RepositoryIntegrationTest {
     @Test
     fun `document CRUD and missing embedding list`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = Document(DocumentId.random(), "Title A", "Body A")
-        docRepo.insert(doc)
+        val doc = docRepo.create(DocumentCreateRequest("Title A", "Body A"))
         val missing = docRepo.listIdsMissingEmbedding(10)
         assertTrue(missing.any { it.value == doc.id.value })
         // upsert embedding removes from missing
@@ -70,12 +68,11 @@ class RepositoryIntegrationTest {
     fun `batch upsert embeddings`() = runBlocking {
         assumeTrue(postgres != null)
         val docs = (1..3).map { idx ->
-            Document(DocumentId.random(), "Title $idx", "Body $idx")
+            docRepo.create(DocumentCreateRequest("Title $idx", "Body $idx"))
         }
-        docs.forEach { docRepo.insert(it) }
         val vectors = docs.associate { it.id to randomVector() }
         embRepo.batchUpsertEmbeddings(vectors)
-        docs.forEach { id -> assertTrue(embRepo.hasEmbedding(id.id)) }
+        docs.forEach { doc -> assertTrue(embRepo.hasEmbedding(doc.id)) }
     }
 
     @Test
@@ -98,8 +95,7 @@ class RepositoryIntegrationTest {
     @Test
     fun `dimension mismatch throws`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = Document(DocumentId.random(), "Dim", "Mismatch")
-        docRepo.insert(doc)
+        val doc = docRepo.create(DocumentCreateRequest("Dim", "Mismatch"))
         val bad = FloatArray(10) { 0f }
         val ex = assertThrows<IllegalArgumentException> { runBlocking { embRepo.upsertEmbedding(doc.id, bad) } }
         assertTrue(ex.message!!.contains("Vector length"))

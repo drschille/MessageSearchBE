@@ -8,6 +8,7 @@ dependencies {
     api(libs.bundles.exposedAll)
     implementation(libs.hikariCP)
     implementation(libs.flywayCore)
+    implementation(libs.flywayPostgres)
     implementation(libs.postgresDriver)
     implementation(libs.kotlinxSerialization)
     implementation(libs.kotlinxDatetime)

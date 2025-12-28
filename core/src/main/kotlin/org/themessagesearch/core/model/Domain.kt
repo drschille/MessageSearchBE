@@ -92,6 +92,23 @@ data class DocumentResponse(
 )
 
 @Serializable
+data class DocumentListItem(
+    val id: String,
+    val title: String,
+    val languageCode: String,
+    val createdAt: Instant,
+    val updatedAt: Instant
+)
+
+@Serializable
+data class DocumentListResponse(
+    val total: Long,
+    val limit: Int,
+    val offset: Int,
+    val items: List<DocumentListItem>
+)
+
+@Serializable
 data class SearchRequest(
     val query: String,
     val limit: Int? = null,

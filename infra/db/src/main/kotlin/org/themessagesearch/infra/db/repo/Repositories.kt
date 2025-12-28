@@ -113,6 +113,42 @@ class ExposedDocumentRepository : DocumentRepository {
             }
     }
 
+    override suspend fun listDocuments(
+        limit: Int,
+        offset: Int,
+        languageCode: String?,
+        title: String?
+    ): DocumentListResponse = transaction {
+        val countQuery = DocumentsTable.selectAll()
+        languageCode?.let { lang ->
+            countQuery.andWhere { DocumentsTable.languageCode eq lang }
+        }
+        title?.let { t ->
+            countQuery.andWhere { DocumentsTable.title eq t }
+        }
+        val total = countQuery.count()
+        val listQuery = DocumentsTable.selectAll()
+        languageCode?.let { lang ->
+            listQuery.andWhere { DocumentsTable.languageCode eq lang }
+        }
+        title?.let { t ->
+            listQuery.andWhere { DocumentsTable.title eq t }
+        }
+        val items = listQuery
+            .orderBy(DocumentsTable.updatedAt to SortOrder.DESC)
+            .limit(limit, offset.toLong())
+            .map { row ->
+                DocumentListItem(
+                    id = row[DocumentsTable.id].value.toString(),
+                    title = row[DocumentsTable.title],
+                    languageCode = row[DocumentsTable.languageCode],
+                    createdAt = row[DocumentsTable.createdAt].toInstant().toKotlinInstant(),
+                    updatedAt = row[DocumentsTable.updatedAt].toInstant().toKotlinInstant()
+                )
+            }
+        DocumentListResponse(total = total, limit = limit, offset = offset, items = items)
+    }
+
     private fun Transaction.loadDocument(id: UUID, languageCode: String?): Document? {
         val row = DocumentsTable
             .select { DocumentsTable.id eq EntityID(id, DocumentsTable) }

@@ -43,6 +43,7 @@ exposedJdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "ex
 exposedKotlinDatetime = { module = "org.jetbrains.exposed:exposed-kotlin-datetime", version.ref = "exposed" }
 postgresDriver = { module = "org.postgresql:postgresql", version.ref = "postgres" }
 flywayCore = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
+flywayPostgres = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
 hikariCP = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
 micrometerRegistryPrometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometerPrometheus" }
 snakeYaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }

@@ -4,18 +4,23 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.testcontainers.containers.PostgreSQLContainer
+import org.themessagesearch.core.model.CollaborationSnapshot
+import org.themessagesearch.core.model.CollaborationUpdate
 import org.themessagesearch.core.model.DocumentCreateRequest
 import org.themessagesearch.core.model.DocumentParagraphInput
 import org.themessagesearch.infra.db.repo.ExposedDocumentRepository
 import org.themessagesearch.infra.db.repo.ExposedEmbeddingRepository
+import org.themessagesearch.infra.db.repo.ExposedCollaborationRepository
 import kotlinx.coroutines.runBlocking
 import kotlin.random.Random
+import java.util.UUID
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RepositoryIntegrationTest {
     private var postgres: PostgreSQLContainer<*>? = null
     private val docRepo = ExposedDocumentRepository()
     private val embRepo = ExposedEmbeddingRepository()
+    private val collabRepo = ExposedCollaborationRepository()
 
     @BeforeAll
     fun startContainer() {
@@ -93,7 +98,70 @@ class RepositoryIntegrationTest {
             assertTrue(hasIndex("documents", "idx_documents_tsv"), "Missing idx_documents_tsv")
             assertTrue(hasIndex("document_paragraphs", "idx_paragraphs_tsv"), "Missing idx_paragraphs_tsv")
             assertTrue(hasIndex("paragraph_embeddings", "idx_paragraph_embeddings_vec"), "Missing idx_paragraph_embeddings_vec")
+            assertTrue(hasIndex("collab_updates", "idx_collab_updates_document_paragraph_id"), "Missing idx_collab_updates_document_paragraph_id")
+            assertTrue(hasIndex("collab_updates", "idx_collab_updates_document_created_at"), "Missing idx_collab_updates_document_created_at")
         }
+    }
+
+    @Test
+    fun `collaboration updates are idempotent`() = runBlocking {
+        assumeTrue(postgres != null)
+        val doc = docRepo.create(sampleRequest("Collab", "Paragraph body"))
+        val paragraph = doc.paragraphs.first()
+        val update = CollaborationUpdate(
+            documentId = doc.id,
+            paragraphId = paragraph.id,
+            clientId = UUID.randomUUID().toString(),
+            userId = "user-1",
+            languageCode = doc.languageCode,
+            seq = 1,
+            payload = byteArrayOf(1, 2, 3)
+        )
+        val first = collabRepo.appendUpdate(update)
+        val second = collabRepo.appendUpdate(update)
+        assertTrue(first.accepted)
+        assertFalse(second.accepted)
+        assertEquals(first.latestUpdateId, second.latestUpdateId)
+    }
+
+    @Test
+    fun `collaboration update pagination`() = runBlocking {
+        assumeTrue(postgres != null)
+        val doc = docRepo.create(sampleRequest("Collab Paginate", "First paragraph"))
+        val paragraph = doc.paragraphs.first()
+        val clientId = UUID.randomUUID().toString()
+        val update1 = CollaborationUpdate(
+            documentId = doc.id,
+            paragraphId = paragraph.id,
+            clientId = clientId,
+            userId = "user-2",
+            languageCode = doc.languageCode,
+            seq = 1,
+            payload = byteArrayOf(4)
+        )
+        val update2 = update1.copy(seq = 2, payload = byteArrayOf(5))
+        val id1 = collabRepo.appendUpdate(update1).latestUpdateId
+        collabRepo.appendUpdate(update2)
+        val results = collabRepo.listUpdates(doc.id, paragraph.id, doc.languageCode, afterId = id1, limit = 10)
+        assertEquals(1, results.size)
+        assertEquals(2, results.first().seq)
+    }
+
+    @Test
+    fun `collaboration snapshot roundtrip`() = runBlocking {
+        assumeTrue(postgres != null)
+        val doc = docRepo.create(sampleRequest("Collab Snapshot", "Body"))
+        val snapshot = CollaborationSnapshot(
+            documentId = doc.id,
+            languageCode = doc.languageCode,
+            snapshotVersion = 10,
+            payload = byteArrayOf(9, 8, 7)
+        )
+        collabRepo.upsertSnapshot(snapshot)
+        val fetched = collabRepo.getSnapshot(doc.id, doc.languageCode)
+        assertNotNull(fetched)
+        assertEquals(10, fetched!!.snapshotVersion)
+        assertArrayEquals(byteArrayOf(9, 8, 7), fetched.payload)
     }
 
     @Test

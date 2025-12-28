@@ -7,6 +7,12 @@ interface DocumentRepository {
     suspend fun findById(id: DocumentId, snapshotId: SnapshotId? = null, languageCode: String? = null): Document?
     suspend fun fetchByIds(ids: Collection<DocumentId>, languageCode: String? = null): Map<DocumentId, Document>
     suspend fun listParagraphsMissingEmbedding(limit: Int, cursor: ParagraphId? = null, languageCode: String? = null): List<DocumentParagraph>
+    suspend fun listDocuments(
+        limit: Int,
+        offset: Int,
+        languageCode: String? = null,
+        title: String? = null
+    ): DocumentListResponse
 }
 
 interface EmbeddingRepository {
@@ -33,4 +39,19 @@ interface AnswerService {
 
 interface EmbeddingBackfillService {
     suspend fun backfill(batchSize: Int, cursor: ParagraphId?, languageCode: String? = null): BackfillResult
+}
+
+interface CollaborationRepository {
+    data class AppendResult(val accepted: Boolean, val latestUpdateId: Long)
+
+    suspend fun appendUpdate(update: CollaborationUpdate): AppendResult
+    suspend fun listUpdates(
+        documentId: DocumentId,
+        paragraphId: ParagraphId?,
+        languageCode: String,
+        afterId: Long?,
+        limit: Int
+    ): List<CollaborationUpdate>
+    suspend fun getSnapshot(documentId: DocumentId, languageCode: String): CollaborationSnapshot?
+    suspend fun upsertSnapshot(snapshot: CollaborationSnapshot)
 }

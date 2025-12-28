@@ -10,6 +10,7 @@ This spec defines backend responsibilities in **MessageSearchBE** (Ktor + Postgr
 
 ## Goals
 - Multiple clients can edit the same document concurrently with deterministic convergence.
+- Treat **paragraphs as the first sub-level** of a document so updates can be scoped narrowly while still rolling up to the parent document.
 - Support offline edits and later synchronization.
 - Provide incremental sync (send/receive deltas, not full document each time).
 - Preserve an auditable stream of changes (for replay/debugging) with bounded storage.
@@ -56,12 +57,23 @@ Represents a connected client participating in a document.
 - `connectedAt`
 - `lastSeenAt`
 
+### CollaborationParagraph
+Tracks the metadata for the first sub-level within a document (paragraph).
+- `paragraphId`
+- `documentId`
+- `languageCode` (BCP 47, e.g., `en-US`)
+- `position` (ordering within the document)
+- `createdAt`
+- `updatedAt`
+
 ### CollaborationUpdate
-Append-only record of CRDT updates.
+Append-only record of CRDT updates targeting a paragraph.
 - `id` (monotonic)
 - `documentId`
+- `paragraphId`
 - `clientId`
 - `userId`
+- `languageCode`
 - `seq` (per-client sequence to support idempotency)
 - `payload` (bytes)
 - `createdAt`
@@ -69,8 +81,9 @@ Append-only record of CRDT updates.
 ### CollaborationSnapshot
 Materialized state to bound replay cost.
 - `documentId`
+- `languageCode`
 - `snapshotVersion` (update id watermark)
-- `payload` (bytes; full CRDT document state)
+- `payload` (bytes; map of paragraph payloads or full CRDT document state)
 - `createdAt`
 
 ---
@@ -78,21 +91,34 @@ Materialized state to bound replay cost.
 ## Persistence (Postgres)
 
 ### Tables (Flyway-managed)
-1. `collab_updates`
+1. `collab_paragraphs`
+     - `paragraph_id UUID PRIMARY KEY`
+     - `document_id UUID NOT NULL`
+     - `language_code TEXT NOT NULL`
+     - `position INT NOT NULL`
+     - `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`
+     - `updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`
+     - Unique constraint: `(document_id, language_code, position)` to enforce ordering
+
+2. `collab_updates`
      - `id BIGSERIAL PRIMARY KEY`
      - `document_id UUID NOT NULL`
+     - `paragraph_id UUID NOT NULL`
      - `client_id UUID NOT NULL`
      - `user_id TEXT NOT NULL`
+     - `language_code TEXT NOT NULL`
      - `seq BIGINT NOT NULL`
      - `payload BYTEA NOT NULL`
      - `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`
-     - Unique constraint: `(document_id, client_id, seq)` for idempotent retry handling
+     - Unique constraint: `(document_id, paragraph_id, client_id, seq)` for idempotent retry handling
      - Indexes:
-         - `(document_id, id)` for fast range queries
+         - `(document_id, paragraph_id, id)` for fast range queries by paragraph
          - `(document_id, created_at)` optional for TTL/cleanup jobs
 
-2. `collab_snapshots`
-     - `document_id UUID PRIMARY KEY`
+3. `collab_snapshots`
+     - `document_id UUID NOT NULL`
+     - `language_code TEXT NOT NULL`
+     - `PRIMARY KEY (document_id, language_code)`
      - `snapshot_version BIGINT NOT NULL` (max `collab_updates.id` included)
      - `payload BYTEA NOT NULL`
      - `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`
@@ -117,6 +143,8 @@ All endpoints require JWT authentication. Authorization must ensure the user is 
 1. `POST /documents/{documentId}/collab/updates`
      - Request:
          - `clientId: UUID`
+         - `paragraphId: UUID`
+         - `languageCode: String`
          - `seq: Long`
          - `update: String` (base64)
      - Behavior:
@@ -126,27 +154,27 @@ All endpoints require JWT authentication. Authorization must ensure the user is 
          - `accepted: Boolean`
          - `latestUpdateId: Long`
 
-2. `GET /documents/{documentId}/collab/updates?afterId={id}&limit={n}`
-     - Returns updates strictly after `afterId` ordered by `id`.
+2. `GET /documents/{documentId}/collab/updates?paragraphId={pid}&languageCode={lang}&afterId={id}&limit={n}`
+     - Returns updates strictly after `afterId` ordered by `id` for the requested paragraph/language.
      - Response items include:
-         - `id`, `clientId`, `seq`, `update` (base64), `createdAt`
+         - `id`, `paragraphId`, `clientId`, `seq`, `languageCode`, `update` (base64), `createdAt`
      - Notes:
-         - This is a simple incremental sync for clients that track server watermark.
+         - This is a simple incremental sync for clients that track server watermark per paragraph. Supplying `paragraphId=null` replays every paragraph in the document (used for catch-up).
 
-3. `GET /documents/{documentId}/collab/snapshot`
-     - Returns latest snapshot payload + its `snapshotVersion`.
+3. `GET /documents/{documentId}/collab/snapshot?languageCode={lang}`
+     - Returns latest snapshot payload + its `snapshotVersion` for the requested language.
      - If no snapshot exists, returns `404` (client can start from empty state + updates).
 
 ### WebSocket (Preferred for Real-Time)
 `GET /documents/{documentId}/collab/ws`
 - On connect:
-    - client sends `hello` with `clientId` and optionally `afterId` (or library-specific state vector)
+    - client sends `hello` with `clientId`, `languageCode`, the paragraph(s) it cares about, and optionally `afterId` (or library-specific state vector)
 - Server:
-    - streams missed updates
-    - then broadcasts incoming updates to other subscribers of the same document
+    - streams missed updates for the requested paragraphs
+    - then broadcasts incoming updates to other subscribers of the same document/language
 - Message types (conceptual):
     - `hello`
-    - `update` (bytes)
+    - `update` (bytes + `paragraphId`)
     - `ack` (latestUpdateId)
     - `error`
 
@@ -155,18 +183,18 @@ WebSocket frames should carry binary update payloads to avoid base64 overhead (J
 ---
 
 ## Consistency & Idempotency Rules
-- Updates are applied in CRDT client; server ordering is by `collab_updates.id`.
-- Server must accept out-of-order `seq` values (per client) but must reject duplicates via `(documentId, clientId, seq)` constraint.
+- Updates are applied in CRDT client; server ordering is by `collab_updates.id` per paragraph.
+- Server must accept out-of-order `seq` values (per client) but must reject duplicates via `(documentId, paragraphId, clientId, seq)` constraint.
 - Clients must be able to:
     - resend updates on reconnect without duplication
-    - request all updates after a known watermark (or snapshot)
+    - request all updates after a known watermark (or snapshot) per paragraph or language
 
 ---
 
 ## Security
 - No secrets in payloads or logs.
-- Enforce document-level authorization on every sync call.
-- Rate limits (future): per user/document to reduce abuse.
+- Enforce document-level authorization on every sync call, plus paragraph-level scoping when needed.
+- Rate limits (future): per user/document/language to reduce abuse.
 - Payload size limits:
     - max single update bytes (configurable; protect memory)
     - max batch size returned per request (`limit` capped)
@@ -180,7 +208,7 @@ WebSocket frames should carry binary update payloads to avoid base64 overhead (J
     - websocket connections per document
     - snapshot creation count and duration
 - Logging:
-    - documentId, userId, clientId, updateId/seq (no payload logging)
+    - documentId, paragraphId, userId, clientId, languageCode, updateId/seq (no payload logging)
 - `/health` and `/metrics` must remain unaffected.
 
 ---
@@ -197,7 +225,7 @@ If `Document` content is used for hybrid search:
 
 ## Testing Plan
 ### Unit Tests
-- Idempotent insert behavior (same `(documentId, clientId, seq)` is a no-op).
+- Idempotent insert behavior (same `(documentId, paragraphId, clientId, seq)` is a no-op).
 - Pagination/range correctness for `GET updates`.
 - Authorization checks are enforced.
 

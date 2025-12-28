@@ -10,6 +10,7 @@ dependencies {
     implementation(libs.flywayCore)
     implementation(libs.postgresDriver)
     implementation(libs.kotlinxSerialization)
+    implementation(libs.kotlinxDatetime)
 
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinxCoroutines)

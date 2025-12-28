@@ -92,7 +92,8 @@ private fun Route.documentRoutes(docRepo: DocumentRepository) {
                 return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid snapshot_id"))
             }
         }
-        val doc = docRepo.findById(documentId, snapshot) ?: return@get call.respond(HttpStatusCode.NotFound)
+        val languageCode = call.request.queryParameters["language_code"]
+        val doc = docRepo.findById(documentId, snapshot, languageCode) ?: return@get call.respond(HttpStatusCode.NotFound)
         call.respond(doc.toResponse())
     }
 }
@@ -103,7 +104,7 @@ private fun Route.searchRoutes(searchService: HybridSearchService, searchConfig:
         val limit = (req.limit ?: 10).coerceIn(1, 100)
         val offset = maxOf(req.offset ?: 0, 0)
         val weights = req.weights ?: searchConfig.weights
-        val results = searchService.search(req.query, limit, offset, weights)
+        val results = searchService.search(req.query, limit, offset, weights, req.languageCode)
         call.respond(results)
     }
 }
@@ -112,7 +113,7 @@ private fun Route.answerRoutes(answerService: AnswerService, searchConfig: Searc
     post("/v1/answer") {
         val req = call.receive<AnswerRequest>()
         val limit = (req.limit ?: 5).coerceIn(1, 25)
-        val resp = answerService.answer(req.query, limit, searchConfig.weights)
+        val resp = answerService.answer(req.query, limit, searchConfig.weights, req.languageCode)
         call.respond(resp)
     }
 }
@@ -121,12 +122,12 @@ private fun Route.ingestRoutes(backfill: EmbeddingBackfillService) {
     post("/v1/ingest/embed") {
         val req = call.receive<EmbedBackfillRequest>()
         val batchSize = (req.batchSize ?: 50).coerceIn(1, 500)
-        val cursor = req.cursor?.let {
-            runCatching { DocumentId(it) }.getOrElse {
-                return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid cursor"))
+        val cursor = req.paragraphCursor?.let {
+            runCatching { ParagraphId(it) }.getOrElse {
+                return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid paragraph cursor"))
             }
         }
-        val result = backfill.backfill(batchSize, cursor)
+        val result = backfill.backfill(batchSize, cursor, req.languageCode)
         call.respond(result)
     }
 }

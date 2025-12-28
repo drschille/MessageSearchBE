@@ -4,19 +4,19 @@ import org.themessagesearch.core.model.*
 
 interface DocumentRepository {
     suspend fun create(request: DocumentCreateRequest): Document
-    suspend fun findById(id: DocumentId, snapshotId: SnapshotId? = null): Document?
-    suspend fun fetchByIds(ids: Collection<DocumentId>): Map<DocumentId, Document>
-    suspend fun listIdsMissingEmbedding(limit: Int, cursor: DocumentId? = null): List<DocumentId>
+    suspend fun findById(id: DocumentId, snapshotId: SnapshotId? = null, languageCode: String? = null): Document?
+    suspend fun fetchByIds(ids: Collection<DocumentId>, languageCode: String? = null): Map<DocumentId, Document>
+    suspend fun listParagraphsMissingEmbedding(limit: Int, cursor: ParagraphId? = null, languageCode: String? = null): List<DocumentParagraph>
 }
 
 interface EmbeddingRepository {
-    suspend fun upsertEmbedding(docId: DocumentId, vector: FloatArray)
-    suspend fun batchUpsertEmbeddings(vectors: Map<DocumentId, FloatArray>)
-    suspend fun hasEmbedding(docId: DocumentId): Boolean
+    suspend fun upsertParagraphEmbedding(paragraphId: ParagraphId, vector: FloatArray)
+    suspend fun batchUpsertParagraphEmbeddings(vectors: Map<ParagraphId, FloatArray>)
+    suspend fun hasParagraphEmbedding(paragraphId: ParagraphId): Boolean
 }
 
 interface HybridSearchService {
-    suspend fun search(query: String, limit: Int, offset: Int, weights: HybridWeights): SearchResponse
+    suspend fun search(query: String, limit: Int, offset: Int, weights: HybridWeights, languageCode: String? = null): SearchResponse
 }
 
 interface EmbeddingClient {
@@ -28,9 +28,9 @@ interface ChatClient {
 }
 
 interface AnswerService {
-    suspend fun answer(query: String, limit: Int, weights: HybridWeights): AnswerResponse
+    suspend fun answer(query: String, limit: Int, weights: HybridWeights, languageCode: String? = null): AnswerResponse
 }
 
 interface EmbeddingBackfillService {
-    suspend fun backfill(batchSize: Int, cursor: DocumentId?): BackfillResult
+    suspend fun backfill(batchSize: Int, cursor: ParagraphId?, languageCode: String? = null): BackfillResult
 }

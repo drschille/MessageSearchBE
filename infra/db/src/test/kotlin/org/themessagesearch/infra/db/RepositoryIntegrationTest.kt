@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.testcontainers.containers.PostgreSQLContainer
 import org.themessagesearch.core.model.DocumentCreateRequest
-import org.themessagesearch.core.model.DocumentId
+import org.themessagesearch.core.model.DocumentParagraphInput
 import org.themessagesearch.infra.db.repo.ExposedDocumentRepository
 import org.themessagesearch.infra.db.repo.ExposedEmbeddingRepository
 import kotlinx.coroutines.runBlocking
@@ -45,8 +45,8 @@ class RepositoryIntegrationTest {
     fun `migration V1 created tables`() = runBlocking {
         assumeTrue(postgres != null)
         // Simple sanity: insert + select to prove tables exist
-        val doc = docRepo.create(DocumentCreateRequest("Migrate", "Check tables"))
-        val fetched = docRepo.findById(doc.id)
+        val doc = docRepo.create(sampleRequest("Migrate", "Check tables"))
+        val fetched = docRepo.findById(doc.id, snapshotId = null, languageCode = doc.languageCode)
         assertNotNull(fetched)
         assertEquals(doc.title, fetched!!.title)
     }
@@ -54,25 +54,28 @@ class RepositoryIntegrationTest {
     @Test
     fun `document CRUD and missing embedding list`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(DocumentCreateRequest("Title A", "Body A"))
-        val missing = docRepo.listIdsMissingEmbedding(10)
-        assertTrue(missing.any { it.value == doc.id.value })
+        val doc = docRepo.create(sampleRequest("Title A", "Body A"))
+        val missing = docRepo.listParagraphsMissingEmbedding(10)
+        val firstParagraph = doc.paragraphs.first()
+        assertTrue(missing.any { it.id.value == firstParagraph.id.value })
         // upsert embedding removes from missing
         val vector = FloatArray(1536) { 0f }
-        embRepo.upsertEmbedding(doc.id, vector)
-        val missing2 = docRepo.listIdsMissingEmbedding(10)
-        assertFalse(missing2.any { it.value == doc.id.value })
+        embRepo.upsertParagraphEmbedding(firstParagraph.id, vector)
+        val missing2 = docRepo.listParagraphsMissingEmbedding(10)
+        assertFalse(missing2.any { it.id.value == firstParagraph.id.value })
     }
 
     @Test
     fun `batch upsert embeddings`() = runBlocking {
         assumeTrue(postgres != null)
-        val docs = (1..3).map { idx ->
-            docRepo.create(DocumentCreateRequest("Title $idx", "Body $idx"))
+        val paragraphs = (1..3).map { idx ->
+            docRepo.create(sampleRequest("Title $idx", "Body $idx")).paragraphs.first()
         }
-        val vectors = docs.associate { it.id to randomVector() }
-        embRepo.batchUpsertEmbeddings(vectors)
-        docs.forEach { doc -> assertTrue(embRepo.hasEmbedding(doc.id)) }
+        val vectors = paragraphs.associate { it.id to randomVector() }
+        embRepo.batchUpsertParagraphEmbeddings(vectors)
+        paragraphs.forEach { paragraph ->
+            assertTrue(embRepo.hasParagraphEmbedding(paragraph.id))
+        }
     }
 
     @Test
@@ -88,17 +91,26 @@ class RepositoryIntegrationTest {
                 ps.executeQuery().next()
             }
             assertTrue(hasIndex("documents", "idx_documents_tsv"), "Missing idx_documents_tsv")
-            assertTrue(hasIndex("doc_embeddings", "idx_embeddings_vec"), "Missing idx_embeddings_vec")
+            assertTrue(hasIndex("document_paragraphs", "idx_paragraphs_tsv"), "Missing idx_paragraphs_tsv")
+            assertTrue(hasIndex("paragraph_embeddings", "idx_paragraph_embeddings_vec"), "Missing idx_paragraph_embeddings_vec")
         }
     }
 
     @Test
     fun `dimension mismatch throws`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(DocumentCreateRequest("Dim", "Mismatch"))
+        val doc = docRepo.create(sampleRequest("Dim", "Mismatch"))
+        val paragraph = doc.paragraphs.first()
         val bad = FloatArray(10) { 0f }
-        val ex = assertThrows<IllegalArgumentException> { runBlocking { embRepo.upsertEmbedding(doc.id, bad) } }
+        val ex = assertThrows<IllegalArgumentException> { runBlocking { embRepo.upsertParagraphEmbedding(paragraph.id, bad) } }
         assertTrue(ex.message!!.contains("Vector length"))
+    }
+
+    private fun sampleRequest(title: String, body: String, languageCode: String = "en-US"): DocumentCreateRequest {
+        val paragraphs = body.split("\n\n").mapIndexed { idx, text ->
+            DocumentParagraphInput(position = idx, heading = null, body = text, languageCode = languageCode)
+        }
+        return DocumentCreateRequest(title = title, languageCode = languageCode, paragraphs = paragraphs)
     }
 
     private fun randomVector(): FloatArray = FloatArray(1536) { Random.nextFloat() }

@@ -28,3 +28,22 @@ The shared build logic was extracted to a convention plugin located in `buildSrc
 
 This project uses a version catalog (see `gradle/libs.versions.toml`) to declare and version dependencies
 and both a build cache and a configuration cache (see `gradle.properties`).
+
+## Local JWTs
+To call authenticated endpoints locally, issue a development JWT that matches `application.yaml`:
+
+```bash
+python3 scripts/issue-jwt.py
+```
+
+You can override defaults:
+
+```bash
+python3 scripts/issue-jwt.py --roles editor,reviewer --sub 00000000-0000-0000-0000-000000000000
+```
+
+Or via Gradle:
+
+```bash
+./gradlew :app:issueJwt
+```

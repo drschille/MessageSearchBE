@@ -79,12 +79,49 @@ fun Application.ktorModule(appConfig: AppConfig, services: ServiceRegistry.Regis
             searchRoutes(services.searchService, appConfig.search)
             answerRoutes(services.answerService, appConfig.search)
             ingestRoutes(services.backfillService)
+            userRoutes(services.userRepo)
         }
     }
 }
 
+private data class AuthContext(val userId: UserId, val roles: List<UserRole>)
+
+private suspend fun ApplicationCall.requireAuthContext(): AuthContext? {
+    val principal = principal<JWTPrincipal>()
+        ?: return respond(HttpStatusCode.Unauthorized, mapOf("error" to "invalid or missing token")).let { null }
+    val subject = principal.payload.subject
+        ?: return respond(HttpStatusCode.Unauthorized, mapOf("error" to "missing user id")).let { null }
+    val userId = runCatching { UserId(subject) }.getOrElse {
+        return respond(HttpStatusCode.Unauthorized, mapOf("error" to "invalid user id")).let { null }
+    }
+    val roleClaim = principal.payload.getClaim("roles")
+    val roleStrings = runCatching { roleClaim.asList(String::class.java) }.getOrNull()
+        ?: return respond(HttpStatusCode.Unauthorized, mapOf("error" to "missing roles")).let { null }
+    if (roleStrings.isEmpty()) {
+        return respond(HttpStatusCode.Unauthorized, mapOf("error" to "missing roles")).let { null }
+    }
+    val parsed = roleStrings.mapNotNull { UserRole.fromString(it) }
+    if (parsed.size != roleStrings.size) {
+        return respond(HttpStatusCode.Unauthorized, mapOf("error" to "invalid roles")).let { null }
+    }
+    return AuthContext(userId, parsed.distinct())
+}
+
+private suspend fun ApplicationCall.requireAnyRole(auth: AuthContext, vararg required: UserRole): Boolean {
+    if (auth.roles.contains(UserRole.ADMIN)) return true
+    if (required.isEmpty()) return true
+    if (required.any { auth.roles.contains(it) }) return true
+    respond(HttpStatusCode.Forbidden, mapOf("error" to "forbidden"))
+    return false
+}
+
+private fun AuthContext.hasRole(role: UserRole): Boolean =
+    roles.contains(UserRole.ADMIN) || roles.contains(role)
+
 private fun Route.documentRoutes(docRepo: DocumentRepository) {
     get("/v1/documents") {
+        val auth = call.requireAuthContext() ?: return@get
+        if (!call.requireAnyRole(auth, UserRole.READER)) return@get
         val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 200) ?: 50
         val offset = call.request.queryParameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val languageCode = call.request.queryParameters["language_code"]
@@ -93,11 +130,15 @@ private fun Route.documentRoutes(docRepo: DocumentRepository) {
         call.respond(result)
     }
     post("/v1/documents") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.EDITOR)) return@post
         val req = call.receive<DocumentCreateRequest>()
         val document = docRepo.create(req)
         call.respond(HttpStatusCode.Created, document.toResponse())
     }
     get("/v1/documents/{id}") {
+        val auth = call.requireAuthContext() ?: return@get
+        if (!call.requireAnyRole(auth, UserRole.READER)) return@get
         val idParam = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
         val documentId = runCatching { DocumentId(idParam) }.getOrElse {
             return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
@@ -116,6 +157,8 @@ private fun Route.documentRoutes(docRepo: DocumentRepository) {
 
 private fun Route.searchRoutes(searchService: HybridSearchService, searchConfig: SearchConfig) {
     post("/v1/search") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.READER)) return@post
         val req = call.receive<SearchRequest>()
         val limit = (req.limit ?: 10).coerceIn(1, 100)
         val offset = maxOf(req.offset ?: 0, 0)
@@ -127,6 +170,8 @@ private fun Route.searchRoutes(searchService: HybridSearchService, searchConfig:
 
 private fun Route.answerRoutes(answerService: AnswerService, searchConfig: SearchConfig) {
     post("/v1/answer") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.READER)) return@post
         val req = call.receive<AnswerRequest>()
         val limit = (req.limit ?: 5).coerceIn(1, 25)
         val resp = answerService.answer(req.query, limit, searchConfig.weights, req.languageCode)
@@ -136,6 +181,8 @@ private fun Route.answerRoutes(answerService: AnswerService, searchConfig: Searc
 
 private fun Route.ingestRoutes(backfill: EmbeddingBackfillService) {
     post("/v1/ingest/embed") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.ADMIN)) return@post
         val req = call.receive<EmbedBackfillRequest>()
         val batchSize = (req.batchSize ?: 50).coerceIn(1, 500)
         val cursor = req.paragraphCursor?.let {
@@ -145,6 +192,107 @@ private fun Route.ingestRoutes(backfill: EmbeddingBackfillService) {
         }
         val result = backfill.backfill(batchSize, cursor, req.languageCode)
         call.respond(result)
+    }
+}
+
+private fun Route.userRoutes(userRepo: UserRepository) {
+    get("/v1/users/me") {
+        val auth = call.requireAuthContext() ?: return@get
+        val profile = userRepo.findOrCreateFromAuth(auth.userId, auth.roles.toList(), email = null, displayName = null)
+        val response = profile.toResponse().copy(roles = auth.roles.toList())
+        call.respond(response)
+    }
+
+    get("/v1/users") {
+        val auth = call.requireAuthContext() ?: return@get
+        if (!call.requireAnyRole(auth, UserRole.ADMIN)) return@get
+        userRepo.findOrCreateFromAuth(auth.userId, auth.roles.toList(), email = null, displayName = null)
+        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 200) ?: 50
+        val cursor = call.request.queryParameters["cursor"]
+        val result = runCatching { userRepo.listUsers(limit, cursor) }.getOrElse {
+            return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid cursor"))
+        }
+        call.respond(UserListResponse(result.items.map { it.toResponse() }, result.nextCursor))
+    }
+
+    post("/v1/users") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.ADMIN)) return@post
+        userRepo.findOrCreateFromAuth(auth.userId, auth.roles.toList(), email = null, displayName = null)
+        val req = call.receive<UserCreateRequest>()
+        if (req.roles.isEmpty()) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "roles must include at least one role"))
+        }
+        val created = userRepo.createUser(req, auth.userId)
+            ?: return@post call.respond(HttpStatusCode.Conflict, mapOf("error" to "user already exists"))
+        call.respond(HttpStatusCode.Created, created.toResponse())
+    }
+
+    get("/v1/users/{id}") {
+        val auth = call.requireAuthContext() ?: return@get
+        val idParam = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val userId = runCatching { UserId(idParam) }.getOrElse {
+            return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid user id"))
+        }
+        if (auth.userId != userId && !auth.hasRole(UserRole.ADMIN)) {
+            return@get call.respond(HttpStatusCode.Forbidden, mapOf("error" to "forbidden"))
+        }
+        val user = userRepo.findById(userId) ?: return@get call.respond(HttpStatusCode.NotFound)
+        val response = if (auth.userId == userId) user.toResponse().copy(roles = auth.roles.toList()) else user.toResponse()
+        call.respond(response)
+    }
+
+    patch("/v1/users/{id}/roles") {
+        val auth = call.requireAuthContext() ?: return@patch
+        if (!call.requireAnyRole(auth, UserRole.ADMIN)) return@patch
+        userRepo.findOrCreateFromAuth(auth.userId, auth.roles.toList(), email = null, displayName = null)
+        val idParam = call.parameters["id"] ?: return@patch call.respond(HttpStatusCode.BadRequest)
+        val userId = runCatching { UserId(idParam) }.getOrElse {
+            return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid user id"))
+        }
+        val req = call.receive<UserUpdateRolesRequest>()
+        if (req.roles.isEmpty()) {
+            return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "roles must include at least one role"))
+        }
+        if (req.reason.isBlank()) {
+            return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "reason is required"))
+        }
+        val updated = userRepo.replaceRoles(userId, req.roles, auth.userId, req.reason)
+            ?: return@patch call.respond(HttpStatusCode.NotFound)
+        call.respond(updated.toResponse())
+    }
+
+    patch("/v1/users/{id}/status") {
+        val auth = call.requireAuthContext() ?: return@patch
+        if (!call.requireAnyRole(auth, UserRole.ADMIN)) return@patch
+        userRepo.findOrCreateFromAuth(auth.userId, auth.roles.toList(), email = null, displayName = null)
+        val idParam = call.parameters["id"] ?: return@patch call.respond(HttpStatusCode.BadRequest)
+        val userId = runCatching { UserId(idParam) }.getOrElse {
+            return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid user id"))
+        }
+        val req = call.receive<UserUpdateStatusRequest>()
+        if (req.reason.isBlank()) {
+            return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "reason is required"))
+        }
+        val updated = userRepo.updateStatus(userId, req.status, auth.userId, req.reason)
+            ?: return@patch call.respond(HttpStatusCode.NotFound)
+        call.respond(updated.toResponse())
+    }
+
+    get("/v1/users/{id}/audits") {
+        val auth = call.requireAuthContext() ?: return@get
+        if (!call.requireAnyRole(auth, UserRole.ADMIN)) return@get
+        userRepo.findOrCreateFromAuth(auth.userId, auth.roles.toList(), email = null, displayName = null)
+        val idParam = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val userId = runCatching { UserId(idParam) }.getOrElse {
+            return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid user id"))
+        }
+        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 200) ?: 50
+        val cursor = call.request.queryParameters["cursor"]
+        val result = runCatching { userRepo.listAudits(userId, limit, cursor) }.getOrElse {
+            return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid cursor"))
+        }
+        call.respond(UserAuditListResponse(result.items, result.nextCursor))
     }
 }
 
@@ -167,15 +315,14 @@ private fun Any?.toJsonElement(): JsonElement = when (this) {
 
 private fun Route.collaborationRoutes(collabRepo: CollaborationRepository) {
     post("/v1/documents/{documentId}/collab/updates") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.EDITOR, UserRole.REVIEWER)) return@post
         val documentParam = call.parameters["documentId"]
             ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing document id"))
         val documentId = runCatching { DocumentId(documentParam) }.getOrElse {
             return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
         }
-        val principal = call.principal<JWTPrincipal>()
-            ?: return@post call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "invalid or missing token"))
-        val userId = principal.payload.subject
-            ?: return@post call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "missing user id"))
+        val userId = auth.userId.value
         val req = call.receive<CollaborationUpdateRequest>()
         val paragraphId = runCatching { ParagraphId(req.paragraphId) }.getOrElse {
             return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid paragraph id"))
@@ -200,6 +347,8 @@ private fun Route.collaborationRoutes(collabRepo: CollaborationRepository) {
     }
 
     get("/v1/documents/{documentId}/collab/updates") {
+        val auth = call.requireAuthContext() ?: return@get
+        if (!call.requireAnyRole(auth, UserRole.EDITOR, UserRole.REVIEWER)) return@get
         val documentParam = call.parameters["documentId"]
             ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing document id"))
         val documentId = runCatching { DocumentId(documentParam) }.getOrElse {
@@ -232,6 +381,8 @@ private fun Route.collaborationRoutes(collabRepo: CollaborationRepository) {
     }
 
     get("/v1/documents/{documentId}/collab/snapshot") {
+        val auth = call.requireAuthContext() ?: return@get
+        if (!call.requireAnyRole(auth, UserRole.EDITOR, UserRole.REVIEWER)) return@get
         val documentParam = call.parameters["documentId"]
             ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing document id"))
         val documentId = runCatching { DocumentId(documentParam) }.getOrElse {

@@ -6,6 +6,7 @@ import org.themessagesearch.infra.db.DatabaseFactory
 import org.themessagesearch.infra.db.repo.ExposedCollaborationRepository
 import org.themessagesearch.infra.db.repo.ExposedDocumentRepository
 import org.themessagesearch.infra.db.repo.ExposedEmbeddingRepository
+import org.themessagesearch.infra.db.repo.ExposedUserRepository
 import org.themessagesearch.infra.search.HybridSearchServiceImpl
 import org.themessagesearch.infra.search.AnswerServiceImpl
 import org.themessagesearch.infra.search.EmbeddingBackfillServiceImpl
@@ -17,6 +18,7 @@ object ServiceRegistry {
         val documentRepo: DocumentRepository,
         val embeddingRepo: EmbeddingRepository,
         val collaborationRepo: CollaborationRepository,
+        val userRepo: UserRepository,
         val searchService: HybridSearchService,
         val answerService: AnswerService,
         val backfillService: EmbeddingBackfillService,
@@ -32,6 +34,7 @@ object ServiceRegistry {
         val docRepo = ExposedDocumentRepository()
         val embRepo = ExposedEmbeddingRepository()
         val collabRepo = ExposedCollaborationRepository()
+        val userRepo = ExposedUserRepository()
         val search = HybridSearchServiceImpl(embeddingClient, candidateK = cfg.search.k)
         val answer = AnswerServiceImpl(search, chatClient)
         val backfill = EmbeddingBackfillServiceImpl(docRepo, embRepo, embeddingClient)
@@ -592,6 +595,7 @@ object ServiceRegistry {
             documentRepo = docRepo,
             embeddingRepo = embRepo,
             collaborationRepo = collabRepo,
+            userRepo = userRepo,
             searchService = search,
             answerService = answer,
             backfillService = backfill,

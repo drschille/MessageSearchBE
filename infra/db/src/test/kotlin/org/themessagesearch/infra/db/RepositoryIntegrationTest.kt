@@ -8,9 +8,15 @@ import org.themessagesearch.core.model.CollaborationSnapshot
 import org.themessagesearch.core.model.CollaborationUpdate
 import org.themessagesearch.core.model.DocumentCreateRequest
 import org.themessagesearch.core.model.DocumentParagraphInput
+import org.themessagesearch.core.model.UserAuditAction
+import org.themessagesearch.core.model.UserCreateRequest
+import org.themessagesearch.core.model.UserId
+import org.themessagesearch.core.model.UserRole
+import org.themessagesearch.core.model.UserStatus
 import org.themessagesearch.infra.db.repo.ExposedDocumentRepository
 import org.themessagesearch.infra.db.repo.ExposedEmbeddingRepository
 import org.themessagesearch.infra.db.repo.ExposedCollaborationRepository
+import org.themessagesearch.infra.db.repo.ExposedUserRepository
 import kotlinx.coroutines.runBlocking
 import kotlin.random.Random
 import java.util.UUID
@@ -21,6 +27,7 @@ class RepositoryIntegrationTest {
     private val docRepo = ExposedDocumentRepository()
     private val embRepo = ExposedEmbeddingRepository()
     private val collabRepo = ExposedCollaborationRepository()
+    private val userRepo = ExposedUserRepository()
 
     @BeforeAll
     fun startContainer() {
@@ -172,6 +179,31 @@ class RepositoryIntegrationTest {
         val bad = FloatArray(10) { 0f }
         val ex = assertThrows<IllegalArgumentException> { runBlocking { embRepo.upsertParagraphEmbedding(paragraph.id, bad) } }
         assertTrue(ex.message!!.contains("Vector length"))
+    }
+
+    @Test
+    fun `user roles and audits roundtrip`() = runBlocking {
+        assumeTrue(postgres != null)
+        val adminId = UserId(UUID.randomUUID().toString())
+        userRepo.findOrCreateFromAuth(adminId, listOf(UserRole.ADMIN), email = null, displayName = null)
+        val created = userRepo.createUser(
+            UserCreateRequest(email = "user@example.com", displayName = "User", roles = listOf(UserRole.EDITOR)),
+            adminId
+        )
+        assertNotNull(created)
+        val fetched = userRepo.findById(created!!.id)
+        assertNotNull(fetched)
+        assertEquals(listOf(UserRole.EDITOR), fetched!!.roles)
+        val updated = userRepo.replaceRoles(created.id, listOf(UserRole.REVIEWER), adminId, "promoted")
+        assertNotNull(updated)
+        assertEquals(listOf(UserRole.REVIEWER), updated!!.roles)
+        val statusUpdated = userRepo.updateStatus(created.id, UserStatus.DISABLED, adminId, "left company")
+        assertNotNull(statusUpdated)
+        assertEquals(UserStatus.DISABLED, statusUpdated!!.status)
+        val audits = userRepo.listAudits(created.id, 10, null)
+        assertTrue(audits.items.any { it.action == UserAuditAction.USER_CREATED })
+        assertTrue(audits.items.any { it.action == UserAuditAction.ROLES_REPLACED })
+        assertTrue(audits.items.any { it.action == UserAuditAction.STATUS_CHANGED })
     }
 
     private fun sampleRequest(title: String, body: String, languageCode: String = "en-US"): DocumentCreateRequest {

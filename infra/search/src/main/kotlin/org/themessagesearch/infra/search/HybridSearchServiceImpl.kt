@@ -52,6 +52,7 @@ class HybridSearchServiceImpl(
         """.trimIndent()
         val ds = DatabaseFactory.getDataSource()
         return ds.connection.use { conn ->
+            @Suppress("UNUSED_CHANGED_VALUE")
             conn.prepareStatement(sql).use { ps ->
                 var idx = 1
                 ps.setString(idx++, query)

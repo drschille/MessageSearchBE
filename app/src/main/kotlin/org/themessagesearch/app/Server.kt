@@ -136,6 +136,42 @@ private fun Route.documentRoutes(docRepo: DocumentRepository) {
         val document = docRepo.create(req)
         call.respond(HttpStatusCode.Created, document.toResponse())
     }
+    post("/v1/documents:batch") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.EDITOR)) return@post
+        val req = call.receive<DocumentCreateBatchRequest>()
+        if (req.documents.isEmpty()) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "documents must not be empty"))
+        }
+        val maxBatchSize = 100
+        if (req.documents.size > maxBatchSize) {
+            return@post call.respond(
+                HttpStatusCode.BadRequest,
+                mapOf("error" to "batch size ${req.documents.size} exceeds max $maxBatchSize")
+            )
+        }
+        val results = req.documents.mapIndexed { index, documentRequest ->
+            runCatching { docRepo.create(documentRequest) }
+                .fold(
+                    onSuccess = { document ->
+                        DocumentCreateBatchResult(index = index, document = document.toResponse())
+                    },
+                    onFailure = { error ->
+                        DocumentCreateBatchResult(
+                            index = index,
+                            error = error.message ?: "invalid payload"
+                        )
+                    }
+                )
+        }
+        val created = results.count { it.document != null }
+        val response = DocumentCreateBatchResponse(
+            created = created,
+            failed = results.size - created,
+            results = results
+        )
+        call.respond(response)
+    }
     get("/v1/documents/{id}") {
         val auth = call.requireAuthContext() ?: return@get
         if (!call.requireAnyRole(auth, UserRole.READER)) return@get

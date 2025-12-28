@@ -73,6 +73,7 @@ Snapshots capture immutable published versions per language; `documents` rows ma
 
 ### Endpoints (minimum viable set)
 - `POST /v1/documents` – ingest a document; accepts per-paragraph payloads `{ paragraphs: [ { position, heading?, body, language_code } ] }` and returns `id`, `version`, `language_code`, and `snapshot_id` when published.
+- `POST /v1/documents:batch` – ingest multiple documents; accepts `{ documents: [ { title, language_code, paragraphs, publish } ] }` and returns per-item results.
 - `GET /v1/documents/{id}` – fetch by ID (latest or specific snapshot via query); supports `language_code` and `fields` filters plus `If-None-Match` for caching.
 - `POST /v1/search` – body `{ query: String, limit?: Int = 10, offset?: Int = 0, weights?: { text: Double, vector: Double }, language_code?: String }`; returns total count, stable ordering, and raw scores at the paragraph level.
 - `POST /v1/answer` – body `{ query: String, limit?: Int = 5, language_code?: String }`; uses search then chat/generation, returns citations of `document_id`, `paragraph_id`, `snapshot_id`, and `language_code` per supporting passage.

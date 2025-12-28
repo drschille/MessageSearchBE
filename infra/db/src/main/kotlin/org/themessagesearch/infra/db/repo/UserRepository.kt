@@ -7,11 +7,9 @@ import kotlinx.datetime.toKotlinInstant
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.and
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.or
 import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.themessagesearch.core.model.*
@@ -327,6 +325,15 @@ class ExposedUserRepository : UserRepository {
         updatedAt = updatedAt
     )
 
+    private fun ResultRow.toAuditEvent(): UserAuditEvent = UserAuditEvent(
+        auditId = this[UserAuditsTable.id].value.toString(),
+        actorId = this[UserAuditsTable.actorId].value.toString(),
+        targetUserId = this[UserAuditsTable.targetUserId].value.toString(),
+        action = this[UserAuditsTable.action].toUserAuditAction(),
+        reason = this[UserAuditsTable.reason],
+        createdAt = this[UserAuditsTable.createdAt].toInstant().toKotlinInstant()
+    )
+
     private fun parseCursor(cursor: String): ParsedCursor {
         val parts = cursor.split('|', limit = 2)
         require(parts.size == 2) { "invalid cursor" }
@@ -344,11 +351,24 @@ class ExposedUserRepository : UserRepository {
 private fun String.toUserRole(): UserRole =
     UserRole.fromString(this) ?: error("Unknown role $this")
 
+private fun String.toUserAuditAction(): UserAuditAction = when (this) {
+    "user.created" -> UserAuditAction.USER_CREATED
+    "roles.replaced" -> UserAuditAction.ROLES_REPLACED
+    "status.changed" -> UserAuditAction.STATUS_CHANGED
+    else -> error("Unknown audit action $this")
+}
+
 private fun UserRole.dbValue(): String = when (this) {
     UserRole.READER -> "reader"
     UserRole.EDITOR -> "editor"
     UserRole.REVIEWER -> "reviewer"
     UserRole.ADMIN -> "admin"
+}
+
+private fun UserAuditAction.dbValue(): String = when (this) {
+    UserAuditAction.USER_CREATED -> "user.created"
+    UserAuditAction.ROLES_REPLACED -> "roles.replaced"
+    UserAuditAction.STATUS_CHANGED -> "status.changed"
 }
 
 private fun String.toUserStatus(): UserStatus = when (this) {

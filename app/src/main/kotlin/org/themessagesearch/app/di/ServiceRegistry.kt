@@ -43,6 +43,7 @@ object ServiceRegistry {
                         "requestBody" to mapOf(
                             "content" to mapOf(
                                 "application/json" to mapOf(
+                                    "schema" to mapOf("\$ref" to "#/components/schemas/DocumentCreateRequest"),
                                     "example" to mapOf(
                                         "title" to "Sample title",
                                         "languageCode" to "en-US",
@@ -95,6 +96,33 @@ object ServiceRegistry {
                                         )
                                     )
                                 )
+                            ),
+                            "400" to mapOf(
+                                "description" to "Bad Request",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "invalid payload")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "invalid or missing token")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "forbidden")
+                                    )
+                                )
                             )
                         )
                     )
@@ -136,6 +164,42 @@ object ServiceRegistry {
                                         )
                                     )
                                 )
+                            ),
+                            "400" to mapOf(
+                                "description" to "Bad Request",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "invalid document id")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "invalid or missing token")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "forbidden")
+                                    )
+                                )
+                            ),
+                            "404" to mapOf(
+                                "description" to "Not Found",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "document not found")
+                                    )
+                                )
                             )
                         )
                     )
@@ -146,6 +210,7 @@ object ServiceRegistry {
                         "requestBody" to mapOf(
                             "content" to mapOf(
                                 "application/json" to mapOf(
+                                    "schema" to mapOf("\$ref" to "#/components/schemas/SearchRequest"),
                                     "example" to mapOf(
                                         "query" to "policy update",
                                         "limit" to 10,
@@ -182,6 +247,33 @@ object ServiceRegistry {
                                         )
                                     )
                                 )
+                            ),
+                            "400" to mapOf(
+                                "description" to "Bad Request",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "invalid search request")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "invalid or missing token")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "forbidden")
+                                    )
+                                )
                             )
                         )
                     )
@@ -192,6 +284,7 @@ object ServiceRegistry {
                         "requestBody" to mapOf(
                             "content" to mapOf(
                                 "application/json" to mapOf(
+                                    "schema" to mapOf("\$ref" to "#/components/schemas/AnswerRequest"),
                                     "example" to mapOf(
                                         "query" to "What changed in the policy?",
                                         "limit" to 5,
@@ -222,6 +315,33 @@ object ServiceRegistry {
                                         )
                                     )
                                 )
+                            ),
+                            "400" to mapOf(
+                                "description" to "Bad Request",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "invalid answer request")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "invalid or missing token")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "forbidden")
+                                    )
+                                )
                             )
                         )
                     )
@@ -232,6 +352,7 @@ object ServiceRegistry {
                         "requestBody" to mapOf(
                             "content" to mapOf(
                                 "application/json" to mapOf(
+                                    "schema" to mapOf("\$ref" to "#/components/schemas/EmbedBackfillRequest"),
                                     "example" to mapOf(
                                         "batchSize" to 100,
                                         "paragraphCursor" to null,
@@ -250,6 +371,33 @@ object ServiceRegistry {
                                             "processed" to 100,
                                             "nextParagraphCursor" to "c7a4a0e5-9f2e-4d1b-8b78-3d9b9d935f0d"
                                         )
+                                    )
+                                )
+                            ),
+                            "400" to mapOf(
+                                "description" to "Bad Request",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "invalid paragraph cursor")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "invalid or missing token")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "forbidden")
                                     )
                                 )
                             )
@@ -272,6 +420,29 @@ object ServiceRegistry {
                             "updatedAt" to mapOf("type" to "string", "format" to "date-time")
                         ),
                         "required" to listOf("id", "documentId", "position", "body", "languageCode", "createdAt", "updatedAt")
+                    ),
+                    "DocumentParagraphInput" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "position" to mapOf("type" to "integer"),
+                            "heading" to mapOf("type" to "string", "nullable" to true),
+                            "body" to mapOf("type" to "string"),
+                            "languageCode" to mapOf("type" to "string")
+                        ),
+                        "required" to listOf("position", "body", "languageCode")
+                    ),
+                    "DocumentCreateRequest" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "title" to mapOf("type" to "string"),
+                            "languageCode" to mapOf("type" to "string"),
+                            "paragraphs" to mapOf(
+                                "type" to "array",
+                                "items" to mapOf("\$ref" to "#/components/schemas/DocumentParagraphInput")
+                            ),
+                            "publish" to mapOf("type" to "boolean")
+                        ),
+                        "required" to listOf("title", "languageCode", "paragraphs")
                     ),
                     "DocumentResponse" to mapOf(
                         "type" to "object",
@@ -314,6 +485,25 @@ object ServiceRegistry {
                             "finalScore"
                         )
                     ),
+                    "SearchRequest" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "query" to mapOf("type" to "string"),
+                            "limit" to mapOf("type" to "integer"),
+                            "offset" to mapOf("type" to "integer"),
+                            "languageCode" to mapOf("type" to "string", "nullable" to true),
+                            "weights" to mapOf("\$ref" to "#/components/schemas/HybridWeights")
+                        ),
+                        "required" to listOf("query")
+                    ),
+                    "HybridWeights" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "text" to mapOf("type" to "number"),
+                            "vector" to mapOf("type" to "number")
+                        ),
+                        "required" to listOf("text", "vector")
+                    ),
                     "SearchResponse" to mapOf(
                         "type" to "object",
                         "properties" to mapOf(
@@ -347,6 +537,15 @@ object ServiceRegistry {
                         ),
                         "required" to listOf("prompt", "completion")
                     ),
+                    "AnswerRequest" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "query" to mapOf("type" to "string"),
+                            "limit" to mapOf("type" to "integer"),
+                            "languageCode" to mapOf("type" to "string", "nullable" to true)
+                        ),
+                        "required" to listOf("query")
+                    ),
                     "AnswerResponse" to mapOf(
                         "type" to "object",
                         "properties" to mapOf(
@@ -359,6 +558,14 @@ object ServiceRegistry {
                         ),
                         "required" to listOf("answer", "citations")
                     ),
+                    "EmbedBackfillRequest" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "batchSize" to mapOf("type" to "integer"),
+                            "paragraphCursor" to mapOf("type" to "string", "format" to "uuid", "nullable" to true),
+                            "languageCode" to mapOf("type" to "string", "nullable" to true)
+                        )
+                    ),
                     "BackfillResult" to mapOf(
                         "type" to "object",
                         "properties" to mapOf(
@@ -366,6 +573,13 @@ object ServiceRegistry {
                             "nextParagraphCursor" to mapOf("type" to "string", "format" to "uuid", "nullable" to true)
                         ),
                         "required" to listOf("processed")
+                    ),
+                    "ErrorResponse" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "error" to mapOf("type" to "string")
+                        ),
+                        "required" to listOf("error")
                     )
                 )
             )

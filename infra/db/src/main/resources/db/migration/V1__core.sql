@@ -5,6 +5,9 @@ CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY,
     title TEXT NOT NULL,
     body TEXT NOT NULL,
+    version BIGINT NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     tsv tsvector GENERATED ALWAYS AS (
         setweight(to_tsvector('simple', coalesce(title,'')), 'A') ||
         setweight(to_tsvector('simple', coalesce(body,'')), 'B')
@@ -19,4 +22,3 @@ CREATE TABLE IF NOT EXISTS doc_embeddings (
 CREATE INDEX IF NOT EXISTS idx_documents_tsv ON documents USING gin(tsv);
 CREATE INDEX IF NOT EXISTS idx_embeddings_vec ON doc_embeddings USING ivfflat (vec vector_cosine_ops)
     WITH (lists = 200);
-

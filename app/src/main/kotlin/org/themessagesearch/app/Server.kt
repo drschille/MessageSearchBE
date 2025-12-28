@@ -78,30 +78,41 @@ fun Application.ktorModule(appConfig: AppConfig, services: ServiceRegistry.Regis
 private fun Route.documentRoutes(docRepo: DocumentRepository) {
     post("/v1/documents") {
         val req = call.receive<DocumentCreateRequest>()
-        val doc = Document(DocumentId.random(), req.title, req.body)
-        docRepo.insert(doc)
-        call.respond(HttpStatusCode.Created, DocumentResponse(doc.id.value, doc.title, doc.body))
+        val document = docRepo.create(req)
+        call.respond(HttpStatusCode.Created, document.toResponse())
     }
     get("/v1/documents/{id}") {
         val idParam = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-        val doc = docRepo.findById(DocumentId(idParam)) ?: return@get call.respond(HttpStatusCode.NotFound)
-        call.respond(DocumentResponse(doc.id.value, doc.title, doc.body))
+        val documentId = runCatching { DocumentId(idParam) }.getOrElse {
+            return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
+        }
+        val snapshotParam = call.request.queryParameters["snapshot_id"]
+        val snapshot = snapshotParam?.let {
+            runCatching { SnapshotId(it) }.getOrElse {
+                return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid snapshot_id"))
+            }
+        }
+        val doc = docRepo.findById(documentId, snapshot) ?: return@get call.respond(HttpStatusCode.NotFound)
+        call.respond(doc.toResponse())
     }
 }
 
 private fun Route.searchRoutes(searchService: HybridSearchService, searchConfig: SearchConfig) {
     post("/v1/search") {
         val req = call.receive<SearchRequest>()
-        val limit = req.limit ?: 10
-        val results = searchService.search(req.query, limit, searchConfig.weights)
-        call.respond(SearchResponse(results))
+        val limit = (req.limit ?: 10).coerceIn(1, 100)
+        val offset = maxOf(req.offset ?: 0, 0)
+        val weights = req.weights ?: searchConfig.weights
+        val results = searchService.search(req.query, limit, offset, weights)
+        call.respond(results)
     }
 }
 
 private fun Route.answerRoutes(answerService: AnswerService, searchConfig: SearchConfig) {
     post("/v1/answer") {
         val req = call.receive<AnswerRequest>()
-        val resp = answerService.answer(req.query, searchConfig.k, searchConfig.weights)
+        val limit = (req.limit ?: 5).coerceIn(1, 25)
+        val resp = answerService.answer(req.query, limit, searchConfig.weights)
         call.respond(resp)
     }
 }
@@ -109,7 +120,13 @@ private fun Route.answerRoutes(answerService: AnswerService, searchConfig: Searc
 private fun Route.ingestRoutes(backfill: EmbeddingBackfillService) {
     post("/v1/ingest/embed") {
         val req = call.receive<EmbedBackfillRequest>()
-        val processed = backfill.backfill(req.batchSize ?: 50)
-        call.respond(mapOf("processed" to processed))
+        val batchSize = (req.batchSize ?: 50).coerceIn(1, 500)
+        val cursor = req.cursor?.let {
+            runCatching { DocumentId(it) }.getOrElse {
+                return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid cursor"))
+            }
+        }
+        val result = backfill.backfill(batchSize, cursor)
+        call.respond(result)
     }
 }

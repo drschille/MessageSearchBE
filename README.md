@@ -1,6 +1,12 @@
 # MessageSearchBE
-A Back-end application for message search and proofreading application
+A back-end service for multilingual message search, proofreading, and collaboration.
 
+## Highlights
+- **Paragraph-first modeling:** Documents are composed of ordered paragraphs, enabling fine-grained collaboration, storage, and search results that cite the exact paragraph (and parent document) that matched.
+- **Multilingual by default:** Every document version and paragraph carries a BCP‑47 language code so ingest, hybrid search, and RAG answering can filter or rank per language and host multiple translations concurrently.
+- **CRDT collaboration:** Operation-based CRDT streams keep concurrent editors in sync while snapshotting state for downstream pipelines (e.g., search index backfills).
+
+## Development Workflow
 This project uses [Gradle](https://gradle.org/).
 To build and run the application, use the *Gradle* tool window by clicking the Gradle icon in the right-hand toolbar,
 or run it directly from the terminal:

@@ -8,11 +8,14 @@ import java.util.UUID
 data class DocumentId(val value: String) {
     init { require(runCatching { UUID.fromString(value) }.isSuccess) { "Invalid UUID: $value" } }
     companion object { fun random() = DocumentId(UUID.randomUUID().toString()) }
+    override fun toString(): String = value
 }
 
 @Serializable
 data class SnapshotId(val value: String) {
     init { require(runCatching { UUID.fromString(value) }.isSuccess) { "Invalid UUID: $value" } }
+    companion object { fun random() = SnapshotId(UUID.randomUUID().toString()) }
+    override fun toString(): String = value
 }
 
 @Serializable

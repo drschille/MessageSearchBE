@@ -410,6 +410,315 @@ object ServiceRegistry {
                         )
                     )
                 )
+                ,
+                "/v1/users/me" to mapOf(
+                    "get" to mapOf(
+                        "summary" to "Get current user profile",
+                        "responses" to mapOf(
+                            "200" to mapOf(
+                                "description" to "OK",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/UserProfileResponse")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
+                "/v1/users" to mapOf(
+                    "get" to mapOf(
+                        "summary" to "List users",
+                        "parameters" to listOf(
+                            mapOf("name" to "limit", "in" to "query", "schema" to mapOf("type" to "integer")),
+                            mapOf("name" to "cursor", "in" to "query", "schema" to mapOf("type" to "string"))
+                        ),
+                        "responses" to mapOf(
+                            "200" to mapOf(
+                                "description" to "OK",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/UserListResponse")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            )
+                        )
+                    ),
+                    "post" to mapOf(
+                        "summary" to "Create user",
+                        "requestBody" to mapOf(
+                            "content" to mapOf(
+                                "application/json" to mapOf(
+                                    "schema" to mapOf("\$ref" to "#/components/schemas/UserCreateRequest")
+                                )
+                            )
+                        ),
+                        "responses" to mapOf(
+                            "201" to mapOf(
+                                "description" to "Created",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/UserProfileResponse")
+                                    )
+                                )
+                            ),
+                            "400" to mapOf(
+                                "description" to "Bad Request",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "409" to mapOf(
+                                "description" to "Conflict",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
+                "/v1/users/{id}" to mapOf(
+                    "get" to mapOf(
+                        "summary" to "Get user profile",
+                        "responses" to mapOf(
+                            "200" to mapOf(
+                                "description" to "OK",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/UserProfileResponse")
+                                    )
+                                )
+                            ),
+                            "400" to mapOf(
+                                "description" to "Bad Request",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "404" to mapOf(
+                                "description" to "Not Found",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
+                "/v1/users/{id}/roles" to mapOf(
+                    "patch" to mapOf(
+                        "summary" to "Replace user roles",
+                        "requestBody" to mapOf(
+                            "content" to mapOf(
+                                "application/json" to mapOf(
+                                    "schema" to mapOf("\$ref" to "#/components/schemas/UserUpdateRolesRequest")
+                                )
+                            )
+                        ),
+                        "responses" to mapOf(
+                            "200" to mapOf(
+                                "description" to "OK",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/UserProfileResponse")
+                                    )
+                                )
+                            ),
+                            "400" to mapOf(
+                                "description" to "Bad Request",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "404" to mapOf(
+                                "description" to "Not Found",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
+                "/v1/users/{id}/status" to mapOf(
+                    "patch" to mapOf(
+                        "summary" to "Update user status",
+                        "requestBody" to mapOf(
+                            "content" to mapOf(
+                                "application/json" to mapOf(
+                                    "schema" to mapOf("\$ref" to "#/components/schemas/UserUpdateStatusRequest")
+                                )
+                            )
+                        ),
+                        "responses" to mapOf(
+                            "200" to mapOf(
+                                "description" to "OK",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/UserProfileResponse")
+                                    )
+                                )
+                            ),
+                            "400" to mapOf(
+                                "description" to "Bad Request",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "404" to mapOf(
+                                "description" to "Not Found",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
+                "/v1/users/{id}/audits" to mapOf(
+                    "get" to mapOf(
+                        "summary" to "List user audits",
+                        "parameters" to listOf(
+                            mapOf("name" to "limit", "in" to "query", "schema" to mapOf("type" to "integer")),
+                            mapOf("name" to "cursor", "in" to "query", "schema" to mapOf("type" to "string"))
+                        ),
+                        "responses" to mapOf(
+                            "200" to mapOf(
+                                "description" to "OK",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/UserAuditListResponse")
+                                    )
+                                )
+                            ),
+                            "400" to mapOf(
+                                "description" to "Bad Request",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse")
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
             ),
             "components" to mapOf(
                 "schemas" to mapOf(
@@ -579,6 +888,85 @@ object ServiceRegistry {
                             "nextParagraphCursor" to mapOf("type" to "string", "format" to "uuid", "nullable" to true)
                         ),
                         "required" to listOf("processed")
+                    ),
+                    "UserProfileResponse" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "id" to mapOf("type" to "string", "format" to "uuid"),
+                            "email" to mapOf("type" to "string", "nullable" to true),
+                            "displayName" to mapOf("type" to "string", "nullable" to true),
+                            "roles" to mapOf(
+                                "type" to "array",
+                                "items" to mapOf("type" to "string")
+                            ),
+                            "status" to mapOf("type" to "string")
+                        ),
+                        "required" to listOf("id", "roles", "status")
+                    ),
+                    "UserCreateRequest" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "email" to mapOf("type" to "string", "nullable" to true),
+                            "displayName" to mapOf("type" to "string", "nullable" to true),
+                            "roles" to mapOf(
+                                "type" to "array",
+                                "items" to mapOf("type" to "string")
+                            )
+                        ),
+                        "required" to listOf("roles")
+                    ),
+                    "UserUpdateRolesRequest" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "roles" to mapOf(
+                                "type" to "array",
+                                "items" to mapOf("type" to "string")
+                            ),
+                            "reason" to mapOf("type" to "string")
+                        ),
+                        "required" to listOf("roles", "reason")
+                    ),
+                    "UserUpdateStatusRequest" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "status" to mapOf("type" to "string"),
+                            "reason" to mapOf("type" to "string")
+                        ),
+                        "required" to listOf("status", "reason")
+                    ),
+                    "UserListResponse" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "items" to mapOf(
+                                "type" to "array",
+                                "items" to mapOf("\$ref" to "#/components/schemas/UserProfileResponse")
+                            ),
+                            "nextCursor" to mapOf("type" to "string", "nullable" to true)
+                        ),
+                        "required" to listOf("items")
+                    ),
+                    "UserAuditEvent" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "auditId" to mapOf("type" to "string", "format" to "uuid"),
+                            "actorId" to mapOf("type" to "string", "format" to "uuid"),
+                            "targetUserId" to mapOf("type" to "string", "format" to "uuid"),
+                            "action" to mapOf("type" to "string"),
+                            "reason" to mapOf("type" to "string", "nullable" to true),
+                            "createdAt" to mapOf("type" to "string", "format" to "date-time")
+                        ),
+                        "required" to listOf("auditId", "actorId", "targetUserId", "action", "createdAt")
+                    ),
+                    "UserAuditListResponse" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "items" to mapOf(
+                                "type" to "array",
+                                "items" to mapOf("\$ref" to "#/components/schemas/UserAuditEvent")
+                            ),
+                            "nextCursor" to mapOf("type" to "string", "nullable" to true)
+                        ),
+                        "required" to listOf("items")
                     ),
                     "ErrorResponse" to mapOf(
                         "type" to "object",

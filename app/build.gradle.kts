@@ -32,3 +32,9 @@ application {
     // (Note that Kotlin compiles `App.kt` to a class with FQN `com.example.app.AppKt`.)
     mainClass = "org.themessagesearch.app.ServerKt"
 }
+
+tasks.register<Exec>("issueJwt") {
+    group = "application"
+    description = "Issue a local JWT for development."
+    commandLine("python3", "${rootDir}/scripts/issue-jwt.py")
+}

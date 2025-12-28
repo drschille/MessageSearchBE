@@ -41,3 +41,9 @@ You can override defaults:
 ```bash
 python3 scripts/issue-jwt.py --roles editor,reviewer --sub 00000000-0000-0000-0000-000000000000
 ```
+
+Or via Gradle:
+
+```bash
+./gradlew :app:issueJwt
+```

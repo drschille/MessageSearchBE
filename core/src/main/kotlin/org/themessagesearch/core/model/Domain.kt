@@ -12,6 +12,13 @@ data class DocumentId(val value: String) {
 }
 
 @Serializable
+data class ParagraphId(val value: String) {
+    init { require(runCatching { UUID.fromString(value) }.isSuccess) { "Invalid UUID: $value" } }
+    companion object { fun random() = ParagraphId(UUID.randomUUID().toString()) }
+    override fun toString(): String = value
+}
+
+@Serializable
 data class SnapshotId(val value: String) {
     init { require(runCatching { UUID.fromString(value) }.isSuccess) { "Invalid UUID: $value" } }
     companion object { fun random() = SnapshotId(UUID.randomUUID().toString()) }
@@ -19,21 +26,75 @@ data class SnapshotId(val value: String) {
 }
 
 @Serializable
+data class DocumentParagraph(
+    val id: ParagraphId,
+    val documentId: DocumentId,
+    val position: Int,
+    val heading: String? = null,
+    val body: String,
+    val languageCode: String,
+    val createdAt: Instant,
+    val updatedAt: Instant
+)
+
+@Serializable
 data class Document(
     val id: DocumentId,
     val title: String,
     val body: String,
     val version: Long,
+    val languageCode: String,
+    val paragraphs: List<DocumentParagraph>,
     val snapshotId: SnapshotId? = null,
     val createdAt: Instant,
     val updatedAt: Instant
 )
 
 @Serializable
+data class DocumentParagraphInput(
+    val position: Int,
+    val heading: String? = null,
+    val body: String,
+    val languageCode: String
+)
+
+@Serializable
 data class DocumentCreateRequest(
     val title: String,
-    val body: String,
+    val languageCode: String,
+    val paragraphs: List<DocumentParagraphInput>,
     val publish: Boolean = true
+)
+
+@Serializable
+data class DocumentCreateBatchRequest(
+    val documents: List<DocumentCreateRequest>
+)
+
+@Serializable
+data class DocumentCreateBatchResult(
+    val index: Int,
+    val document: DocumentResponse? = null,
+    val error: String? = null
+)
+
+@Serializable
+data class DocumentCreateBatchResponse(
+    val created: Int,
+    val failed: Int,
+    val results: List<DocumentCreateBatchResult>
+)
+
+@Serializable
+data class DocumentParagraphResponse(
+    val id: String,
+    val documentId: String,
+    val position: Int,
+    val heading: String? = null,
+    val body: String,
+    val languageCode: String,
+    val createdAt: Instant,
+    val updatedAt: Instant
 )
 
 @Serializable
@@ -43,8 +104,27 @@ data class DocumentResponse(
     val body: String,
     val version: Long,
     val snapshotId: String? = null,
+    val languageCode: String,
+    val paragraphs: List<DocumentParagraphResponse>,
     val createdAt: Instant,
     val updatedAt: Instant
+)
+
+@Serializable
+data class DocumentListItem(
+    val id: String,
+    val title: String,
+    val languageCode: String,
+    val createdAt: Instant,
+    val updatedAt: Instant
+)
+
+@Serializable
+data class DocumentListResponse(
+    val total: Long,
+    val limit: Int,
+    val offset: Int,
+    val items: List<DocumentListItem>
 )
 
 @Serializable
@@ -52,13 +132,16 @@ data class SearchRequest(
     val query: String,
     val limit: Int? = null,
     val offset: Int? = null,
-    val weights: HybridWeights? = null
+    val weights: HybridWeights? = null,
+    val languageCode: String? = null
 )
 
 @Serializable
 data class SearchResultItem(
-    val id: String,
+    val documentId: String,
+    val paragraphId: String? = null,
     val snapshotId: String? = null,
+    val languageCode: String? = null,
     val title: String,
     val snippet: String? = null,
     val textScore: Double,
@@ -75,12 +158,14 @@ data class SearchResponse(
 )
 
 @Serializable
-data class AnswerRequest(val query: String, val limit: Int? = null)
+data class AnswerRequest(val query: String, val limit: Int? = null, val languageCode: String? = null)
 
 @Serializable
 data class Citation(
     val documentId: String,
     val snapshotId: String? = null,
+    val paragraphId: String? = null,
+    val languageCode: String? = null,
     val score: Double,
     val excerpt: String? = null
 )
@@ -96,10 +181,10 @@ data class AnswerResponse(
 data class TokensUsed(val prompt: Int, val completion: Int)
 
 @Serializable
-data class EmbedBackfillRequest(val batchSize: Int? = null, val cursor: String? = null)
+data class EmbedBackfillRequest(val batchSize: Int? = null, val paragraphCursor: String? = null, val languageCode: String? = null)
 
 @Serializable
-data class BackfillResult(val processed: Int, val nextCursor: String?)
+data class BackfillResult(val processed: Int, val nextParagraphCursor: String?)
 
 @Serializable
 data class HybridWeights(val text: Double, val vector: Double) {
@@ -119,6 +204,19 @@ fun Document.toResponse(): DocumentResponse = DocumentResponse(
     body = body,
     version = version,
     snapshotId = snapshotId?.value,
+    languageCode = languageCode,
+    paragraphs = paragraphs.map {
+        DocumentParagraphResponse(
+            id = it.id.value,
+            documentId = it.documentId.value,
+            position = it.position,
+            heading = it.heading,
+            body = it.body,
+            languageCode = it.languageCode,
+            createdAt = it.createdAt,
+            updatedAt = it.updatedAt
+        )
+    },
     createdAt = createdAt,
     updatedAt = updatedAt
 )

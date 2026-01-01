@@ -4,18 +4,30 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.testcontainers.containers.PostgreSQLContainer
+import org.themessagesearch.core.model.CollaborationSnapshot
+import org.themessagesearch.core.model.CollaborationUpdate
 import org.themessagesearch.core.model.DocumentCreateRequest
-import org.themessagesearch.core.model.DocumentId
+import org.themessagesearch.core.model.DocumentParagraphInput
+import org.themessagesearch.core.model.UserAuditAction
+import org.themessagesearch.core.model.UserCreateRequest
+import org.themessagesearch.core.model.UserId
+import org.themessagesearch.core.model.UserRole
+import org.themessagesearch.core.model.UserStatus
 import org.themessagesearch.infra.db.repo.ExposedDocumentRepository
 import org.themessagesearch.infra.db.repo.ExposedEmbeddingRepository
+import org.themessagesearch.infra.db.repo.ExposedCollaborationRepository
+import org.themessagesearch.infra.db.repo.ExposedUserRepository
 import kotlinx.coroutines.runBlocking
 import kotlin.random.Random
+import java.util.UUID
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RepositoryIntegrationTest {
     private var postgres: PostgreSQLContainer<*>? = null
     private val docRepo = ExposedDocumentRepository()
     private val embRepo = ExposedEmbeddingRepository()
+    private val collabRepo = ExposedCollaborationRepository()
+    private val userRepo = ExposedUserRepository()
 
     @BeforeAll
     fun startContainer() {
@@ -45,8 +57,8 @@ class RepositoryIntegrationTest {
     fun `migration V1 created tables`() = runBlocking {
         assumeTrue(postgres != null)
         // Simple sanity: insert + select to prove tables exist
-        val doc = docRepo.create(DocumentCreateRequest("Migrate", "Check tables"))
-        val fetched = docRepo.findById(doc.id)
+        val doc = docRepo.create(sampleRequest("Migrate", "Check tables"))
+        val fetched = docRepo.findById(doc.id, snapshotId = null, languageCode = doc.languageCode)
         assertNotNull(fetched)
         assertEquals(doc.title, fetched!!.title)
     }
@@ -54,25 +66,28 @@ class RepositoryIntegrationTest {
     @Test
     fun `document CRUD and missing embedding list`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(DocumentCreateRequest("Title A", "Body A"))
-        val missing = docRepo.listIdsMissingEmbedding(10)
-        assertTrue(missing.any { it.value == doc.id.value })
+        val doc = docRepo.create(sampleRequest("Title A", "Body A"))
+        val missing = docRepo.listParagraphsMissingEmbedding(10)
+        val firstParagraph = doc.paragraphs.first()
+        assertTrue(missing.any { it.id.value == firstParagraph.id.value })
         // upsert embedding removes from missing
         val vector = FloatArray(1536) { 0f }
-        embRepo.upsertEmbedding(doc.id, vector)
-        val missing2 = docRepo.listIdsMissingEmbedding(10)
-        assertFalse(missing2.any { it.value == doc.id.value })
+        embRepo.upsertParagraphEmbedding(firstParagraph.id, vector)
+        val missing2 = docRepo.listParagraphsMissingEmbedding(10)
+        assertFalse(missing2.any { it.id.value == firstParagraph.id.value })
     }
 
     @Test
     fun `batch upsert embeddings`() = runBlocking {
         assumeTrue(postgres != null)
-        val docs = (1..3).map { idx ->
-            docRepo.create(DocumentCreateRequest("Title $idx", "Body $idx"))
+        val paragraphs = (1..3).map { idx ->
+            docRepo.create(sampleRequest("Title $idx", "Body $idx")).paragraphs.first()
         }
-        val vectors = docs.associate { it.id to randomVector() }
-        embRepo.batchUpsertEmbeddings(vectors)
-        docs.forEach { doc -> assertTrue(embRepo.hasEmbedding(doc.id)) }
+        val vectors = paragraphs.associate { it.id to randomVector() }
+        embRepo.batchUpsertParagraphEmbeddings(vectors)
+        paragraphs.forEach { paragraph ->
+            assertTrue(embRepo.hasParagraphEmbedding(paragraph.id))
+        }
     }
 
     @Test
@@ -88,17 +103,114 @@ class RepositoryIntegrationTest {
                 ps.executeQuery().next()
             }
             assertTrue(hasIndex("documents", "idx_documents_tsv"), "Missing idx_documents_tsv")
-            assertTrue(hasIndex("doc_embeddings", "idx_embeddings_vec"), "Missing idx_embeddings_vec")
+            assertTrue(hasIndex("document_paragraphs", "idx_paragraphs_tsv"), "Missing idx_paragraphs_tsv")
+            assertTrue(hasIndex("paragraph_embeddings", "idx_paragraph_embeddings_vec"), "Missing idx_paragraph_embeddings_vec")
+            assertTrue(hasIndex("collab_updates", "idx_collab_updates_document_paragraph_id"), "Missing idx_collab_updates_document_paragraph_id")
+            assertTrue(hasIndex("collab_updates", "idx_collab_updates_document_created_at"), "Missing idx_collab_updates_document_created_at")
         }
+    }
+
+    @Test
+    fun `collaboration updates are idempotent`() = runBlocking {
+        assumeTrue(postgres != null)
+        val doc = docRepo.create(sampleRequest("Collab", "Paragraph body"))
+        val paragraph = doc.paragraphs.first()
+        val update = CollaborationUpdate(
+            documentId = doc.id,
+            paragraphId = paragraph.id,
+            clientId = UUID.randomUUID().toString(),
+            userId = "user-1",
+            languageCode = doc.languageCode,
+            seq = 1,
+            payload = byteArrayOf(1, 2, 3)
+        )
+        val first = collabRepo.appendUpdate(update)
+        val second = collabRepo.appendUpdate(update)
+        assertTrue(first.accepted)
+        assertFalse(second.accepted)
+        assertEquals(first.latestUpdateId, second.latestUpdateId)
+    }
+
+    @Test
+    fun `collaboration update pagination`() = runBlocking {
+        assumeTrue(postgres != null)
+        val doc = docRepo.create(sampleRequest("Collab Paginate", "First paragraph"))
+        val paragraph = doc.paragraphs.first()
+        val clientId = UUID.randomUUID().toString()
+        val update1 = CollaborationUpdate(
+            documentId = doc.id,
+            paragraphId = paragraph.id,
+            clientId = clientId,
+            userId = "user-2",
+            languageCode = doc.languageCode,
+            seq = 1,
+            payload = byteArrayOf(4)
+        )
+        val update2 = update1.copy(seq = 2, payload = byteArrayOf(5))
+        val id1 = collabRepo.appendUpdate(update1).latestUpdateId
+        collabRepo.appendUpdate(update2)
+        val results = collabRepo.listUpdates(doc.id, paragraph.id, doc.languageCode, afterId = id1, limit = 10)
+        assertEquals(1, results.size)
+        assertEquals(2, results.first().seq)
+    }
+
+    @Test
+    fun `collaboration snapshot roundtrip`() = runBlocking {
+        assumeTrue(postgres != null)
+        val doc = docRepo.create(sampleRequest("Collab Snapshot", "Body"))
+        val snapshot = CollaborationSnapshot(
+            documentId = doc.id,
+            languageCode = doc.languageCode,
+            snapshotVersion = 10,
+            payload = byteArrayOf(9, 8, 7)
+        )
+        collabRepo.upsertSnapshot(snapshot)
+        val fetched = collabRepo.getSnapshot(doc.id, doc.languageCode)
+        assertNotNull(fetched)
+        assertEquals(10, fetched!!.snapshotVersion)
+        assertArrayEquals(byteArrayOf(9, 8, 7), fetched.payload)
     }
 
     @Test
     fun `dimension mismatch throws`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(DocumentCreateRequest("Dim", "Mismatch"))
+        val doc = docRepo.create(sampleRequest("Dim", "Mismatch"))
+        val paragraph = doc.paragraphs.first()
         val bad = FloatArray(10) { 0f }
-        val ex = assertThrows<IllegalArgumentException> { runBlocking { embRepo.upsertEmbedding(doc.id, bad) } }
+        val ex = assertThrows<IllegalArgumentException> { runBlocking { embRepo.upsertParagraphEmbedding(paragraph.id, bad) } }
         assertTrue(ex.message!!.contains("Vector length"))
+    }
+
+    @Test
+    fun `user roles and audits roundtrip`() = runBlocking {
+        assumeTrue(postgres != null)
+        val adminId = UserId(UUID.randomUUID().toString())
+        userRepo.findOrCreateFromAuth(adminId, listOf(UserRole.ADMIN), email = null, displayName = null)
+        val created = userRepo.createUser(
+            UserCreateRequest(email = "user@example.com", displayName = "User", roles = listOf(UserRole.EDITOR)),
+            adminId
+        )
+        assertNotNull(created)
+        val fetched = userRepo.findById(created!!.id)
+        assertNotNull(fetched)
+        assertEquals(listOf(UserRole.EDITOR), fetched!!.roles)
+        val updated = userRepo.replaceRoles(created.id, listOf(UserRole.REVIEWER), adminId, "promoted")
+        assertNotNull(updated)
+        assertEquals(listOf(UserRole.REVIEWER), updated!!.roles)
+        val statusUpdated = userRepo.updateStatus(created.id, UserStatus.DISABLED, adminId, "left company")
+        assertNotNull(statusUpdated)
+        assertEquals(UserStatus.DISABLED, statusUpdated!!.status)
+        val audits = userRepo.listAudits(created.id, 10, null)
+        assertTrue(audits.items.any { it.action == UserAuditAction.USER_CREATED })
+        assertTrue(audits.items.any { it.action == UserAuditAction.ROLES_REPLACED })
+        assertTrue(audits.items.any { it.action == UserAuditAction.STATUS_CHANGED })
+    }
+
+    private fun sampleRequest(title: String, body: String, languageCode: String = "en-US"): DocumentCreateRequest {
+        val paragraphs = body.split("\n\n").mapIndexed { idx, text ->
+            DocumentParagraphInput(position = idx, heading = null, body = text, languageCode = languageCode)
+        }
+        return DocumentCreateRequest(title = title, languageCode = languageCode, paragraphs = paragraphs)
     }
 
     private fun randomVector(): FloatArray = FloatArray(1536) { Random.nextFloat() }

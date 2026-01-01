@@ -2,6 +2,13 @@
 
 This directory collects the product and architectural specifications for MessageSearch. Each document is meant to be concise enough for engineers to act on, while remaining stable references for reviewers and stakeholders.
 
+## Spec Index
+- [Collaboration](collaboration.md)
+- [Editorial Workflow](editorial-workflow.md)
+- [Read & Search](read-and-search.md)
+- [Snapshot and Audit](snapshot-and-audit.md)
+- [Users & Roles](users-and-roles.md)
+
 ## Purpose of This Directory
 - Capture the foundational principles that guide feature design and tradeoffs.
 - Describe the architecture, modules, and cross-cutting behaviors that all services must follow.
@@ -24,7 +31,7 @@ The platform is organized into a small set of Kotlin modules backed by PostgreSQ
 - **Users & Roles.** JWT-authenticated actors with roles (reader, editor, reviewer, admin) that gate operations and log provenance.
 
 ## Module Overview
-- **app/** – Ktor entrypoint, DI wiring, HTTP routes, security filters, and application configuration loader.
+- **backend/** – Ktor entrypoint, DI wiring, HTTP routes, security filters, and application configuration loader.
 - **core/** – Domain models (documents, versions, embeddings), workflow state machine, and service interfaces for search, answers, and repositories.
 - **infra/db/** – PostgreSQL + pgvector repositories (Exposed), Flyway migrations, and Testcontainers-backed integration tests.
 - **infra/ai/** – AI client interfaces plus provider-specific implementations for embeddings and chat/generation.

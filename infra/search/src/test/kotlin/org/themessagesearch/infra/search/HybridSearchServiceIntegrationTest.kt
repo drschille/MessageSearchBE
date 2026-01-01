@@ -13,13 +13,15 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.testcontainers.containers.PostgreSQLContainer
 import org.themessagesearch.core.model.DocumentCreateRequest
+import org.themessagesearch.core.model.DocumentParagraphInput
 import org.themessagesearch.core.model.HybridWeights
 import org.themessagesearch.core.ports.EmbeddingClient
 import org.themessagesearch.infra.db.DatabaseFactory
-import org.themessagesearch.infra.db.repo.DocEmbeddingsTable
+import org.themessagesearch.infra.db.repo.DocumentParagraphsTable
 import org.themessagesearch.infra.db.repo.DocumentsTable
 import org.themessagesearch.infra.db.repo.ExposedDocumentRepository
 import org.themessagesearch.infra.db.repo.ExposedEmbeddingRepository
+import org.themessagesearch.infra.db.repo.ParagraphEmbeddingsTable
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class HybridSearchServiceIntegrationTest {
@@ -56,7 +58,8 @@ class HybridSearchServiceIntegrationTest {
     @BeforeEach
     fun cleanTables() {
         transaction(DatabaseFactory.get()) {
-            DocEmbeddingsTable.deleteAll()
+            ParagraphEmbeddingsTable.deleteAll()
+            DocumentParagraphsTable.deleteAll()
             DocumentsTable.deleteAll()
         }
     }
@@ -64,15 +67,10 @@ class HybridSearchServiceIntegrationTest {
     @Test
     fun `text query returns matching document`() = runBlocking {
         assumeTrue(postgres != null)
-        docRepo.create(
-            DocumentCreateRequest(
-                title = "Searchable doc",
-                body = "The fox jumps over the lazy dog"
-            )
-        )
+        docRepo.create(sampleRequest("Searchable doc", "The fox jumps over the lazy dog"))
         embeddingClient.vector = FloatArray(embeddingClient.dimension)
 
-        val resp = search.search("fox", limit = 5, offset = 0, weights = HybridWeights.Default)
+        val resp = search.search("fox", limit = 5, offset = 0, weights = HybridWeights.Default, languageCode = "en-US")
 
         assertEquals(1, resp.total)
         val result = resp.results.single()
@@ -82,31 +80,36 @@ class HybridSearchServiceIntegrationTest {
     @Test
     fun `vector query surfaces embedding match`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(
-            DocumentCreateRequest(
-                title = "Vector doc",
-                body = "content that does not matter for vector search"
-            )
-        )
+        val doc = docRepo.create(sampleRequest("Vector doc", "content that does not matter for vector search"))
+        val paragraph = doc.paragraphs.first()
         val vector = FloatArray(embeddingClient.dimension) { idx -> if (idx == 0) 1f else 0f }
-        embRepo.upsertEmbedding(doc.id, vector)
+        embRepo.upsertParagraphEmbedding(paragraph.id, vector)
         embeddingClient.vector = vector
 
         val resp = search.search(
             query = "nonsense",
             limit = 5,
             offset = 0,
-            weights = HybridWeights(text = 0.0, vector = 1.0)
+            weights = HybridWeights(text = 0.0, vector = 1.0),
+            languageCode = "en-US"
         )
 
         assertEquals(1, resp.total)
         val result = resp.results.single()
-        assertEquals(doc.id.value, result.id)
+        assertEquals(doc.id.value, result.documentId)
         assertTrue(result.vectorScore > 0.99, "Expected strong vector similarity")
+    }
+
+    private fun sampleRequest(title: String, body: String, languageCode: String = "en-US"): DocumentCreateRequest {
+        val paragraphs = body.split("\n\n").mapIndexed { idx, text ->
+            DocumentParagraphInput(position = idx, heading = null, body = text, languageCode = languageCode)
+        }
+        return DocumentCreateRequest(title = title, languageCode = languageCode, paragraphs = paragraphs)
     }
 
     private class StubEmbeddingClient(val dimension: Int) : EmbeddingClient {
         var vector: FloatArray = FloatArray(dimension)
-        override suspend fun embed(texts: List<String>): List<FloatArray> = listOf(vector)
+        override suspend fun embed(texts: List<String>): List<FloatArray> =
+            List(texts.size) { vector }
     }
 }

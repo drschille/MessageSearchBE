@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Modules
-- `app/`: Ktor entrypoint (`Server.kt`), DI wiring, HTTP routes, config loader using `application.yaml`.
+- `backend/`: Ktor entrypoint (`Server.kt`), DI wiring, HTTP routes, config loader using `application.yaml`.
 - `core/`: Domain models (`Document`, `HybridWeights`) and port interfaces for search, answers, and repositories.
 - `infra/db/`: Postgres/pgvector persistence via Exposed, Flyway migrations, Testcontainers-backed integration tests.
 - `infra/ai/` and `infra/search/`: AI client stubs and hybrid search/answer/backfill services composed from core ports.
@@ -11,7 +11,7 @@
 ## Build, Test, and Run Commands
 - `./gradlew build` – Compile all modules and run unit/integration tests.
 - `./gradlew check` – Run the full verification suite (includes tests and static checks configured by plugins).
-- `./gradlew :app:run` – Start the HTTP server locally on port 8080 using `application.yaml`.
+- `./gradlew :backend:run` – Start the HTTP server locally on port 8080 using `application.yaml`.
 - `./gradlew :infra:db:test` – Run DB/Testcontainers integration tests; requires Docker or start `docker-compose up db`.
 - `SKIP_DB_TESTS=true ./gradlew test` – Skip containerized DB tests when Docker is unavailable.
 
@@ -33,6 +33,6 @@
 - Keep changes scoped; align new modules with existing Gradle convention plugin (`buildsrc.convention.kotlin-jvm`).
 
 ## Security & Configuration Tips
-- Never commit secrets. Override sensitive defaults from `app/src/main/resources/application.yaml` via env vars (`DB_PASSWORD`, `JWT_SECRET`, `AI_API_KEY`).
+- Never commit secrets. Override sensitive defaults from `backend/src/main/resources/application.yaml` via env vars (`DB_PASSWORD`, `JWT_SECRET`, `AI_API_KEY`).
 - JWT auth is enforced on API routes; use the configured issuer/audience when generating tokens for local testing.
 - Verify new endpoints expose `/health` and `/metrics` unaffected; avoid logging secrets in exceptions or call logs.

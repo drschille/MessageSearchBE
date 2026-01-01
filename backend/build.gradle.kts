@@ -9,7 +9,7 @@ plugins {
 }
 
 dependencies {
-    // Project "app" depends on project "utils". (Project paths are separated with ":", so ":utils" refers to the top-level "utils" project.)
+    // Project "backend" depends on core and infra modules.
     implementation(project(":core"))
     implementation(project(":infra:db"))
     implementation(project(":infra:ai"))
@@ -31,4 +31,10 @@ application {
     // Define the Fully Qualified Name for the application main class
     // (Note that Kotlin compiles `App.kt` to a class with FQN `com.example.app.AppKt`.)
     mainClass = "org.themessagesearch.app.ServerKt"
+}
+
+tasks.register<Exec>("issueJwt") {
+    group = "application"
+    description = "Issue a local JWT for development."
+    commandLine("python3", "${rootDir}/scripts/issue-jwt.py")
 }

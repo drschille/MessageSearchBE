@@ -14,37 +14,42 @@ class HybridSearchServiceImpl(
     private val candidateK: Int = 200
 ) : HybridSearchService {
 
-    override suspend fun search(query: String, limit: Int, offset: Int, weights: HybridWeights): SearchResponse {
+    override suspend fun search(query: String, limit: Int, offset: Int, weights: HybridWeights, languageCode: String?): SearchResponse {
         val vec = embeddingClient.embed(listOf(query)).firstOrNull() ?: FloatArray(embeddingDimension) { 0.0f }
         val vectorLiteral = vec.joinToString(prefix = "[", postfix = "]") { it.toString() }
         val sql = """
             WITH q AS (
                 SELECT to_tsvector('simple', ?) AS qts, ?::vector($embeddingDimension) AS qvec
             ),
-            text_hits AS (
-                SELECT d.id, ts_rank(d.tsv, q.qts) AS text_score
-                FROM documents d, q
-                WHERE d.tsv @@ q.qts
+            paragraph_text_hits AS (
+                SELECT p.id, ts_rank(p.tsv, q.qts) AS text_score
+                FROM document_paragraphs p, q
+                WHERE p.tsv @@ q.qts
+                  AND (? IS NULL OR p.language_code = ?)
             ),
-            vec_hits AS (
-                SELECT e.doc_id AS id, 1 - (e.vec <=> q.qvec) AS vec_score
-                FROM doc_embeddings e, q
+            paragraph_vec_hits AS (
+                SELECT e.paragraph_id AS id, 1 - (e.vec <=> q.qvec) AS vec_score
+                FROM paragraph_embeddings e, q
                 ORDER BY e.vec <=> q.qvec
                 LIMIT ?
             ),
             scored AS (
-                SELECT d.id,
+                SELECT p.id AS paragraph_id,
+                       p.document_id,
+                       p.language_code,
                        d.title,
-                       ts_headline('simple', d.body, q.qts, 'MaxFragments=2, MinWords=5, MaxWords=32') AS snippet,
+                       ts_headline('simple', p.body, q.qts, 'MaxFragments=2, MinWords=5, MaxWords=32') AS snippet,
                        coalesce(th.text_score,0) AS text_score,
                        coalesce(vh.vec_score,0)  AS vec_score,
                        (? * coalesce(th.text_score,0) + ? * coalesce(vh.vec_score,0)) AS final_score
-                FROM documents d
-                LEFT JOIN text_hits th ON th.id = d.id
-                LEFT JOIN vec_hits vh ON vh.id = d.id
-                WHERE coalesce(th.text_score,0) > 0 OR coalesce(vh.vec_score,0) > 0
+                FROM document_paragraphs p
+                JOIN documents d ON d.id = p.document_id
+                LEFT JOIN paragraph_text_hits th ON th.id = p.id
+                LEFT JOIN paragraph_vec_hits vh ON vh.id = p.id
+                WHERE (coalesce(th.text_score,0) > 0 OR coalesce(vh.vec_score,0) > 0)
+                  AND (? IS NULL OR p.language_code = ?)
             )
-            SELECT id, title, snippet, text_score, vec_score, final_score,
+            SELECT paragraph_id, document_id, language_code, title, snippet, text_score, vec_score, final_score,
                    COUNT(*) OVER() AS total
             FROM scored
             ORDER BY final_score DESC
@@ -57,9 +62,13 @@ class HybridSearchServiceImpl(
                 var idx = 1
                 ps.setString(idx++, query)
                 ps.setString(idx++, vectorLiteral)
+                ps.setString(idx++, languageCode)
+                ps.setString(idx++, languageCode)
                 ps.setInt(idx++, candidateK)
                 ps.setDouble(idx++, weights.text)
                 ps.setDouble(idx++, weights.vector)
+                ps.setString(idx++, languageCode)
+                ps.setString(idx++, languageCode)
                 ps.setInt(idx++, limit)
                 ps.setInt(idx++, offset)
                 val rs = ps.executeQuery()
@@ -81,7 +90,9 @@ class HybridSearchServiceImpl(
 
     private fun ResultSet.toItem(out: MutableList<SearchResultItem>) {
         out += SearchResultItem(
-            id = getObject("id").toString(),
+            documentId = getObject("document_id").toString(),
+            paragraphId = getObject("paragraph_id").toString(),
+            languageCode = getString("language_code"),
             title = getString("title"),
             snippet = getString("snippet"),
             textScore = getDouble("text_score"),

@@ -4,9 +4,8 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":app"))
+    implementation(project(":backend"))
     implementation(libs.ktorServerTests)
     implementation(libs.testcontainersPostgres)
     testImplementation(kotlin("test"))
 }
-

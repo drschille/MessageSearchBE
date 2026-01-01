@@ -17,7 +17,7 @@ Define how documents are stored, indexed, and retrieved for readers and AI-assis
 
 ## 3. Architecture
 ### Modules
-- **app:** Ktor routes for document ingest, search, answer, and embedding backfill; installs JWT auth and metrics.
+- **backend:** Ktor routes for document ingest, search, answer, and embedding backfill; installs JWT auth and metrics.
 - **core:** Domain models (`Document`, `Snapshot`, `HybridWeights`), ports for repositories, search, and AI clients.
 - **infra:db:** Postgres/pgvector repositories using Exposed, plus Flyway migrations.
 - **infra:ai:** Embedding and chat clients with provider-agnostic interfaces and stubs for tests.

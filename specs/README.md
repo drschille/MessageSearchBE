@@ -31,7 +31,7 @@ The platform is organized into a small set of Kotlin modules backed by PostgreSQ
 - **Users & Roles.** JWT-authenticated actors with roles (reader, editor, reviewer, admin) that gate operations and log provenance.
 
 ## Module Overview
-- **app/** – Ktor entrypoint, DI wiring, HTTP routes, security filters, and application configuration loader.
+- **backend/** – Ktor entrypoint, DI wiring, HTTP routes, security filters, and application configuration loader.
 - **core/** – Domain models (documents, versions, embeddings), workflow state machine, and service interfaces for search, answers, and repositories.
 - **infra/db/** – PostgreSQL + pgvector repositories (Exposed), Flyway migrations, and Testcontainers-backed integration tests.
 - **infra/ai/** – AI client interfaces plus provider-specific implementations for embeddings and chat/generation.

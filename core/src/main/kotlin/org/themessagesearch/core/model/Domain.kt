@@ -67,6 +67,25 @@ data class DocumentCreateRequest(
 )
 
 @Serializable
+data class DocumentCreateBatchRequest(
+    val documents: List<DocumentCreateRequest>
+)
+
+@Serializable
+data class DocumentCreateBatchResult(
+    val index: Int,
+    val document: DocumentResponse? = null,
+    val error: String? = null
+)
+
+@Serializable
+data class DocumentCreateBatchResponse(
+    val created: Int,
+    val failed: Int,
+    val results: List<DocumentCreateBatchResult>
+)
+
+@Serializable
 data class DocumentParagraphResponse(
     val id: String,
     val documentId: String,

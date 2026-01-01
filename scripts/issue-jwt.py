@@ -24,7 +24,7 @@ def main() -> None:
     parser.add_argument("--audience", default=os.getenv("JWT_AUDIENCE", "app-clients"))
     parser.add_argument("--secret", default=os.getenv("JWT_SECRET", "dev-secret"))
     parser.add_argument("--sub", default=os.getenv("JWT_SUB"))
-    parser.add_argument("--roles", default=os.getenv("JWT_ROLES", "editor"))
+    parser.add_argument("--roles", default=os.getenv("JWT_ROLES", "admin"))
     parser.add_argument("--ttl-seconds", type=int, default=3600)
     args = parser.parse_args()
 

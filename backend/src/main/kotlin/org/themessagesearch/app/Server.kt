@@ -44,8 +44,11 @@ fun Application.ktorModule(appConfig: AppConfig, services: ServiceRegistry.Regis
     install(StatusPages) {
         exception<Throwable> { call: ApplicationCall, cause: Throwable ->
             // TODO: integrate structured logging
-            this@ktorModule.environment.log.error("Unhandled exception", cause)
-            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (cause.message ?: "internal error")))
+            val safeMessage = redactSensitive(cause.message ?: "internal error")
+            val safePath = call.request.path()
+            val safeMethod = call.request.httpMethod.value
+            this@ktorModule.environment.log.error("Unhandled exception $safeMethod $safePath: $safeMessage")
+            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "internal error"))
         }
     }
 
@@ -118,6 +121,24 @@ private suspend fun ApplicationCall.requireAnyRole(auth: AuthContext, vararg req
 private fun AuthContext.hasRole(role: UserRole): Boolean =
     roles.contains(UserRole.ADMIN) || roles.contains(role)
 
+private fun redactSensitive(message: String): String {
+    var sanitized = message
+    val patterns = listOf(
+        Regex("(?i)(authorization|bearer)\\s+[^\\s,]+"),
+        Regex("(?i)(api[_-]?key|jwt|token|secret)\\s*[:=]\\s*[^\\s,]+"),
+        Regex("(?i)(\"query\"\\s*:\\s*\")([^\"]+)(\")")
+    )
+    patterns.forEach { pattern ->
+        sanitized = sanitized.replace(pattern) { match ->
+            when {
+                match.groupValues.size >= 4 -> "${match.groupValues[1]}[redacted]${match.groupValues[3]}"
+                else -> "[redacted]"
+            }
+        }
+    }
+    return sanitized
+}
+
 private fun Route.documentRoutes(docRepo: DocumentRepository) {
     get("/v1/documents") {
         val auth = call.requireAuthContext() ?: return@get
@@ -135,6 +156,42 @@ private fun Route.documentRoutes(docRepo: DocumentRepository) {
         val req = call.receive<DocumentCreateRequest>()
         val document = docRepo.create(req)
         call.respond(HttpStatusCode.Created, document.toResponse())
+    }
+    post("/v1/documents:batch") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.EDITOR)) return@post
+        val req = call.receive<DocumentCreateBatchRequest>()
+        if (req.documents.isEmpty()) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "documents must not be empty"))
+        }
+        val maxBatchSize = 100
+        if (req.documents.size > maxBatchSize) {
+            return@post call.respond(
+                HttpStatusCode.BadRequest,
+                mapOf("error" to "batch size ${req.documents.size} exceeds max $maxBatchSize")
+            )
+        }
+        val results = req.documents.mapIndexed { index, documentRequest ->
+            runCatching { docRepo.create(documentRequest) }
+                .fold(
+                    onSuccess = { document ->
+                        DocumentCreateBatchResult(index = index, document = document.toResponse())
+                    },
+                    onFailure = { error ->
+                        DocumentCreateBatchResult(
+                            index = index,
+                            error = error.message ?: "invalid payload"
+                        )
+                    }
+                )
+        }
+        val created = results.count { it.document != null }
+        val response = DocumentCreateBatchResponse(
+            created = created,
+            failed = results.size - created,
+            results = results
+        )
+        call.respond(response)
     }
     get("/v1/documents/{id}") {
         val auth = call.requireAuthContext() ?: return@get

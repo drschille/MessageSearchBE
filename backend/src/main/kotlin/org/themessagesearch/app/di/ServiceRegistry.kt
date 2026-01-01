@@ -133,6 +133,106 @@ object ServiceRegistry {
                         )
                     )
                 ),
+                "/v1/documents:batch" to mapOf(
+                    "post" to mapOf(
+                        "summary" to "Batch create documents",
+                        "requestBody" to mapOf(
+                            "content" to mapOf(
+                                "application/json" to mapOf(
+                                    "schema" to mapOf("\$ref" to "#/components/schemas/DocumentCreateBatchRequest"),
+                                    "example" to mapOf(
+                                        "documents" to listOf(
+                                            mapOf(
+                                                "title" to "Sample title",
+                                                "languageCode" to "en-US",
+                                                "paragraphs" to listOf(
+                                                    mapOf("position" to 0, "body" to "First paragraph.", "languageCode" to "en-US")
+                                                ),
+                                                "publish" to true
+                                            ),
+                                            mapOf(
+                                                "title" to "Second title",
+                                                "languageCode" to "en-US",
+                                                "paragraphs" to listOf(
+                                                    mapOf("position" to 0, "body" to "Another paragraph.", "languageCode" to "en-US")
+                                                ),
+                                                "publish" to true
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        ),
+                        "responses" to mapOf(
+                            "200" to mapOf(
+                                "description" to "Batch results",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/DocumentCreateBatchResponse"),
+                                        "example" to mapOf(
+                                            "created" to 2,
+                                            "failed" to 0,
+                                            "results" to listOf(
+                                                mapOf(
+                                                    "index" to 0,
+                                                    "document" to mapOf(
+                                                        "id" to "2b6b7e5e-7fe9-47b1-8fa2-31a3f2ad2f5c",
+                                                        "title" to "Sample title",
+                                                        "body" to "First paragraph.",
+                                                        "version" to 1,
+                                                        "snapshotId" to "9c2f2b2d-5aef-4b36-9e64-0a7e3c6af9cb",
+                                                        "languageCode" to "en-US",
+                                                        "paragraphs" to listOf(
+                                                            mapOf(
+                                                                "id" to "4b4f3a6b-3e20-4f17-8b6c-6a1f7b4b84ef",
+                                                                "documentId" to "2b6b7e5e-7fe9-47b1-8fa2-31a3f2ad2f5c",
+                                                                "position" to 0,
+                                                                "heading" to null,
+                                                                "body" to "First paragraph.",
+                                                                "languageCode" to "en-US",
+                                                                "createdAt" to "2024-01-01T00:00:00Z",
+                                                                "updatedAt" to "2024-01-01T00:00:00Z"
+                                                            )
+                                                        ),
+                                                        "createdAt" to "2024-01-01T00:00:00Z",
+                                                        "updatedAt" to "2024-01-01T00:00:00Z"
+                                                    )
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            ),
+                            "400" to mapOf(
+                                "description" to "Bad Request",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "batch size 120 exceeds max 100")
+                                    )
+                                )
+                            ),
+                            "401" to mapOf(
+                                "description" to "Unauthorized",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "invalid or missing token")
+                                    )
+                                )
+                            ),
+                            "403" to mapOf(
+                                "description" to "Forbidden",
+                                "content" to mapOf(
+                                    "application/json" to mapOf(
+                                        "schema" to mapOf("\$ref" to "#/components/schemas/ErrorResponse"),
+                                        "example" to mapOf("error" to "forbidden")
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
                 "/v1/documents/{id}" to mapOf(
                     "get" to mapOf(
                         "summary" to "Get document",
@@ -759,6 +859,16 @@ object ServiceRegistry {
                         ),
                         "required" to listOf("title", "languageCode", "paragraphs")
                     ),
+                    "DocumentCreateBatchRequest" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "documents" to mapOf(
+                                "type" to "array",
+                                "items" to mapOf("\$ref" to "#/components/schemas/DocumentCreateRequest")
+                            )
+                        ),
+                        "required" to listOf("documents")
+                    ),
                     "DocumentResponse" to mapOf(
                         "type" to "object",
                         "properties" to mapOf(
@@ -776,6 +886,27 @@ object ServiceRegistry {
                             "updatedAt" to mapOf("type" to "string", "format" to "date-time")
                         ),
                         "required" to listOf("id", "title", "body", "version", "languageCode", "paragraphs", "createdAt", "updatedAt")
+                    ),
+                    "DocumentCreateBatchResult" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "index" to mapOf("type" to "integer"),
+                            "document" to mapOf("\$ref" to "#/components/schemas/DocumentResponse", "nullable" to true),
+                            "error" to mapOf("type" to "string", "nullable" to true)
+                        ),
+                        "required" to listOf("index")
+                    ),
+                    "DocumentCreateBatchResponse" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "created" to mapOf("type" to "integer"),
+                            "failed" to mapOf("type" to "integer"),
+                            "results" to mapOf(
+                                "type" to "array",
+                                "items" to mapOf("\$ref" to "#/components/schemas/DocumentCreateBatchResult")
+                            )
+                        ),
+                        "required" to listOf("created", "failed", "results")
                     ),
                     "SearchResultItem" to mapOf(
                         "type" to "object",

@@ -9,7 +9,7 @@ plugins {
 }
 
 dependencies {
-    // Project "app" depends on project "utils". (Project paths are separated with ":", so ":utils" refers to the top-level "utils" project.)
+    // Project "backend" depends on core and infra modules.
     implementation(project(":core"))
     implementation(project(":infra:db"))
     implementation(project(":infra:ai"))

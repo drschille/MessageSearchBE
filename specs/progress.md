@@ -45,5 +45,5 @@ Status is a quick snapshot and may lag behind active work.
 - [ ] Verify JWT `iss/aud` handling across environments
 
 ## Cross-cutting
-- [ ] Metrics/log redaction for sensitive fields
+- [x] Metrics/log redaction for sensitive fields
 - [ ] End-to-end tests for workflow/snapshot/audit flows

@@ -9,7 +9,7 @@ Effort key: S = 0.5–2 days, M = 3–5 days, L = 6–10 days, XL = 2+ weeks.
 - [x] Paragraph embeddings backfill (S, already done)
 - [x] Hybrid search endpoint (S, already done)
 - [x] Answer endpoint with stub AI (S, already done)
-- [ ] Metrics/log redaction for prompts and sensitive fields (S–M)
+- [x] Metrics/log redaction for prompts and sensitive fields (S–M)
 
 ## M1 - Snapshot Backbone
 - [ ] Snapshot schema + repository (L)

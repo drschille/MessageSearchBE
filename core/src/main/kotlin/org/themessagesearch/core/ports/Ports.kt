@@ -3,7 +3,7 @@ package org.themessagesearch.core.ports
 import org.themessagesearch.core.model.*
 
 interface DocumentRepository {
-    suspend fun create(request: DocumentCreateRequest): Document
+    suspend fun create(request: DocumentCreateRequest, actorId: UserId? = null): Document
     suspend fun findById(id: DocumentId, snapshotId: SnapshotId? = null, languageCode: String? = null): Document?
     suspend fun fetchByIds(ids: Collection<DocumentId>, languageCode: String? = null): Map<DocumentId, Document>
     suspend fun listParagraphsMissingEmbedding(limit: Int, cursor: ParagraphId? = null, languageCode: String? = null): List<DocumentParagraph>
@@ -13,6 +13,18 @@ interface DocumentRepository {
         languageCode: String? = null,
         title: String? = null
     ): DocumentListResponse
+}
+
+interface SnapshotRepository {
+    suspend fun create(snapshot: Snapshot): Snapshot
+    suspend fun list(documentId: DocumentId, limit: Int, cursor: String?): SnapshotListResult
+    suspend fun findById(documentId: DocumentId, snapshotId: SnapshotId): Snapshot?
+}
+
+interface AuditRepository {
+    suspend fun create(event: DocumentAuditEvent): DocumentAuditEvent
+    suspend fun list(documentId: DocumentId, limit: Int, cursor: String?): DocumentAuditListResult
+    suspend fun findById(documentId: DocumentId, auditId: AuditId): DocumentAuditEvent?
 }
 
 interface EmbeddingRepository {

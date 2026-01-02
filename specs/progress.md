@@ -9,7 +9,7 @@ Status is a quick snapshot and may lag behind active work.
 - [x] Hybrid search endpoint and scoring (paragraph level)
 - [x] Answer endpoint with stubbed AI
 - [ ] Document-level embeddings storage + backfill
-- [ ] Snapshot-aware search + answer citations (Published only)
+- [x] Snapshot-aware search + answer citations (Published only)
 - [ ] ETag/If-Match + 409 conflict handling on writes
 - [ ] Idempotency-Key support for mutating endpoints
 - [ ] Rate limiting per token/IP
@@ -24,11 +24,11 @@ Status is a quick snapshot and may lag behind active work.
 - [ ] Notifications/webhooks for review/publish events
 
 ## Snapshot & Audit
-- [ ] Snapshot persistence (schema + repository)
-- [ ] Audit events (schema + repository)
-- [ ] Snapshot list/fetch endpoints
-- [ ] Document audit list/fetch endpoints
-- [ ] Search/answer references `snapshot_id` and version
+- [x] Snapshot persistence (schema + repository)
+- [x] Audit events (schema + repository)
+- [x] Snapshot list/fetch endpoints
+- [x] Document audit list/fetch endpoints
+- [x] Search/answer references `snapshot_id` and version
 
 ## Collaboration (CRDT)
 - [x] Update ingestion + listing endpoints

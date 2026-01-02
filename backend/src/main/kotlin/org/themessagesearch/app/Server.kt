@@ -79,6 +79,8 @@ fun Application.ktorModule(appConfig: AppConfig, services: ServiceRegistry.Regis
         authenticate("auth-jwt") {
             documentRoutes(services.documentRepo)
             collaborationRoutes(services.collaborationRepo)
+            snapshotRoutes(services.snapshotRepo)
+            auditRoutes(services.auditRepo)
             searchRoutes(services.searchService, appConfig.search)
             answerRoutes(services.answerService, appConfig.search)
             ingestRoutes(services.backfillService)
@@ -154,7 +156,7 @@ private fun Route.documentRoutes(docRepo: DocumentRepository) {
         val auth = call.requireAuthContext() ?: return@post
         if (!call.requireAnyRole(auth, UserRole.EDITOR)) return@post
         val req = call.receive<DocumentCreateRequest>()
-        val document = docRepo.create(req)
+        val document = docRepo.create(req, auth.userId)
         call.respond(HttpStatusCode.Created, document.toResponse())
     }
     post("/v1/documents:batch") {
@@ -172,7 +174,7 @@ private fun Route.documentRoutes(docRepo: DocumentRepository) {
             )
         }
         val results = req.documents.mapIndexed { index, documentRequest ->
-            runCatching { docRepo.create(documentRequest) }
+            runCatching { docRepo.create(documentRequest, auth.userId) }
                 .fold(
                     onSuccess = { document ->
                         DocumentCreateBatchResult(index = index, document = document.toResponse())
@@ -209,6 +211,66 @@ private fun Route.documentRoutes(docRepo: DocumentRepository) {
         val languageCode = call.request.queryParameters["language_code"]
         val doc = docRepo.findById(documentId, snapshot, languageCode) ?: return@get call.respond(HttpStatusCode.NotFound)
         call.respond(doc.toResponse())
+    }
+}
+
+private fun Route.snapshotRoutes(snapshotRepo: SnapshotRepository) {
+    get("/v1/documents/{id}/snapshots") {
+        val auth = call.requireAuthContext() ?: return@get
+        if (!call.requireAnyRole(auth, UserRole.READER)) return@get
+        val idParam = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val documentId = runCatching { DocumentId(idParam) }.getOrElse {
+            return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
+        }
+        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 200) ?: 50
+        val cursor = call.request.queryParameters["cursor"]
+        val result = snapshotRepo.list(documentId, limit, cursor)
+        call.respond(result.toResponse())
+    }
+    get("/v1/documents/{id}/snapshots/{snapshotId}") {
+        val auth = call.requireAuthContext() ?: return@get
+        if (!call.requireAnyRole(auth, UserRole.READER)) return@get
+        val idParam = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val documentId = runCatching { DocumentId(idParam) }.getOrElse {
+            return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
+        }
+        val snapshotParam = call.parameters["snapshotId"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val snapshotId = runCatching { SnapshotId(snapshotParam) }.getOrElse {
+            return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid snapshot id"))
+        }
+        val snapshot = snapshotRepo.findById(documentId, snapshotId)
+            ?: return@get call.respond(HttpStatusCode.NotFound, mapOf("error" to "snapshot not found"))
+        call.respond(snapshot.toResponse())
+    }
+}
+
+private fun Route.auditRoutes(auditRepo: AuditRepository) {
+    get("/v1/documents/{id}/audits") {
+        val auth = call.requireAuthContext() ?: return@get
+        if (!call.requireAnyRole(auth, UserRole.REVIEWER)) return@get
+        val idParam = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val documentId = runCatching { DocumentId(idParam) }.getOrElse {
+            return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
+        }
+        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 200) ?: 50
+        val cursor = call.request.queryParameters["cursor"]
+        val result = auditRepo.list(documentId, limit, cursor)
+        call.respond(result.toResponse())
+    }
+    get("/v1/documents/{id}/audits/{auditId}") {
+        val auth = call.requireAuthContext() ?: return@get
+        if (!call.requireAnyRole(auth, UserRole.REVIEWER)) return@get
+        val idParam = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val documentId = runCatching { DocumentId(idParam) }.getOrElse {
+            return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
+        }
+        val auditParam = call.parameters["auditId"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val auditId = runCatching { AuditId(auditParam) }.getOrElse {
+            return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid audit id"))
+        }
+        val audit = auditRepo.findById(documentId, auditId)
+            ?: return@get call.respond(HttpStatusCode.NotFound, mapOf("error" to "audit not found"))
+        call.respond(audit.toResponse())
     }
 }
 

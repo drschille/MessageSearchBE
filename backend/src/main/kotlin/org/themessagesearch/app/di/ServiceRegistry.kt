@@ -6,6 +6,8 @@ import org.themessagesearch.infra.db.DatabaseFactory
 import org.themessagesearch.infra.db.repo.ExposedCollaborationRepository
 import org.themessagesearch.infra.db.repo.ExposedDocumentRepository
 import org.themessagesearch.infra.db.repo.ExposedEmbeddingRepository
+import org.themessagesearch.infra.db.repo.ExposedSnapshotRepository
+import org.themessagesearch.infra.db.repo.ExposedAuditRepository
 import org.themessagesearch.infra.db.repo.ExposedUserRepository
 import org.themessagesearch.infra.search.HybridSearchServiceImpl
 import org.themessagesearch.infra.search.AnswerServiceImpl
@@ -18,6 +20,8 @@ object ServiceRegistry {
         val documentRepo: DocumentRepository,
         val embeddingRepo: EmbeddingRepository,
         val collaborationRepo: CollaborationRepository,
+        val snapshotRepo: SnapshotRepository,
+        val auditRepo: AuditRepository,
         val userRepo: UserRepository,
         val searchService: HybridSearchService,
         val answerService: AnswerService,
@@ -34,6 +38,8 @@ object ServiceRegistry {
         val docRepo = ExposedDocumentRepository()
         val embRepo = ExposedEmbeddingRepository()
         val collabRepo = ExposedCollaborationRepository()
+        val snapshotRepo = ExposedSnapshotRepository()
+        val auditRepo = ExposedAuditRepository()
         val userRepo = ExposedUserRepository()
         val search = HybridSearchServiceImpl(embeddingClient, candidateK = cfg.search.k)
         val answer = AnswerServiceImpl(search, chatClient)
@@ -342,6 +348,7 @@ object ServiceRegistry {
                                                     "documentId" to "2b6b7e5e-7fe9-47b1-8fa2-31a3f2ad2f5c",
                                                     "paragraphId" to "4b4f3a6b-3e20-4f17-8b6c-6a1f7b4b84ef",
                                                     "snapshotId" to "9c2f2b2d-5aef-4b36-9e64-0a7e3c6af9cb",
+                                                    "version" to 1,
                                                     "languageCode" to "en-US",
                                                     "title" to "Sample title",
                                                     "snippet" to "First paragraph.",
@@ -412,6 +419,7 @@ object ServiceRegistry {
                                                     "documentId" to "2b6b7e5e-7fe9-47b1-8fa2-31a3f2ad2f5c",
                                                     "paragraphId" to "4b4f3a6b-3e20-4f17-8b6c-6a1f7b4b84ef",
                                                     "snapshotId" to "9c2f2b2d-5aef-4b36-9e64-0a7e3c6af9cb",
+                                                    "version" to 1,
                                                     "languageCode" to "en-US",
                                                     "score" to 0.63,
                                                     "excerpt" to "First paragraph."
@@ -914,6 +922,7 @@ object ServiceRegistry {
                             "documentId" to mapOf("type" to "string", "format" to "uuid"),
                             "paragraphId" to mapOf("type" to "string", "format" to "uuid"),
                             "snapshotId" to mapOf("type" to "string", "format" to "uuid", "nullable" to true),
+                            "version" to mapOf("type" to "integer", "nullable" to true),
                             "languageCode" to mapOf("type" to "string"),
                             "title" to mapOf("type" to "string"),
                             "snippet" to mapOf("type" to "string", "nullable" to true),
@@ -969,6 +978,7 @@ object ServiceRegistry {
                             "documentId" to mapOf("type" to "string", "format" to "uuid"),
                             "paragraphId" to mapOf("type" to "string", "format" to "uuid"),
                             "snapshotId" to mapOf("type" to "string", "format" to "uuid", "nullable" to true),
+                            "version" to mapOf("type" to "integer", "nullable" to true),
                             "languageCode" to mapOf("type" to "string"),
                             "score" to mapOf("type" to "number"),
                             "excerpt" to mapOf("type" to "string", "nullable" to true)
@@ -1114,6 +1124,8 @@ object ServiceRegistry {
             documentRepo = docRepo,
             embeddingRepo = embRepo,
             collaborationRepo = collabRepo,
+            snapshotRepo = snapshotRepo,
+            auditRepo = auditRepo,
             userRepo = userRepo,
             searchService = search,
             answerService = answer,

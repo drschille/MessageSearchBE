@@ -81,6 +81,7 @@ fun Application.ktorModule(appConfig: AppConfig, services: ServiceRegistry.Regis
             collaborationRoutes(services.collaborationRepo)
             snapshotRoutes(services.snapshotRepo)
             auditRoutes(services.auditRepo)
+            workflowRoutes(services.workflowRepo, services.webhookNotifier)
             searchRoutes(services.searchService, appConfig.search)
             answerRoutes(services.answerService, appConfig.search)
             ingestRoutes(services.backfillService)
@@ -120,6 +121,17 @@ private suspend fun ApplicationCall.requireAnyRole(auth: AuthContext, vararg req
     return false
 }
 
+private suspend fun ApplicationCall.requireIfMatchVersion(): Long? {
+    val raw = request.headers[HttpHeaders.IfMatch] ?: return respond(
+        HttpStatusCode.PreconditionRequired,
+        mapOf("error" to "missing if-match header")
+    ).let { null }
+    val cleaned = raw.trim().trim('"')
+    val parsed = cleaned.toLongOrNull()
+        ?: return respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid if-match version")).let { null }
+    return parsed
+}
+
 private fun AuthContext.hasRole(role: UserRole): Boolean =
     roles.contains(UserRole.ADMIN) || roles.contains(role)
 
@@ -149,7 +161,11 @@ private fun Route.documentRoutes(docRepo: DocumentRepository) {
         val offset = call.request.queryParameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val languageCode = call.request.queryParameters["language_code"]
         val title = call.request.queryParameters["title"]
-        val result = docRepo.listDocuments(limit, offset, languageCode, title)
+        val restrictToPublished = !auth.hasRole(UserRole.EDITOR) &&
+            !auth.hasRole(UserRole.REVIEWER) &&
+            !auth.hasRole(UserRole.ADMIN)
+        val state = if (restrictToPublished) DocumentWorkflowState.PUBLISHED else null
+        val result = docRepo.listDocuments(limit, offset, languageCode, title, state)
         call.respond(result)
     }
     post("/v1/documents") {
@@ -210,6 +226,12 @@ private fun Route.documentRoutes(docRepo: DocumentRepository) {
         }
         val languageCode = call.request.queryParameters["language_code"]
         val doc = docRepo.findById(documentId, snapshot, languageCode) ?: return@get call.respond(HttpStatusCode.NotFound)
+        val restrictToPublished = !auth.hasRole(UserRole.EDITOR) &&
+            !auth.hasRole(UserRole.REVIEWER) &&
+            !auth.hasRole(UserRole.ADMIN)
+        if (restrictToPublished && doc.workflowState != DocumentWorkflowState.PUBLISHED) {
+            return@get call.respond(HttpStatusCode.NotFound)
+        }
         call.respond(doc.toResponse())
     }
 }
@@ -271,6 +293,178 @@ private fun Route.auditRoutes(auditRepo: AuditRepository) {
         val audit = auditRepo.findById(documentId, auditId)
             ?: return@get call.respond(HttpStatusCode.NotFound, mapOf("error" to "audit not found"))
         call.respond(audit.toResponse())
+    }
+}
+
+private fun Route.workflowRoutes(workflowRepo: WorkflowRepository, webhookNotifier: WebhookNotifier) {
+    post("/v1/documents/{id}/review") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.EDITOR)) return@post
+        val expectedVersion = call.requireIfMatchVersion() ?: return@post
+        val idParam = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val documentId = runCatching { DocumentId(idParam) }.getOrElse {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
+        }
+        if (workflowRepo.getDocument(documentId) == null) {
+            return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "document not found"))
+        }
+        val req = call.receive<ReviewSubmitRequest>()
+        if (req.reviewers.isEmpty()) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "reviewers required"))
+        }
+        val reviewers = req.reviewers.mapNotNull { reviewerId ->
+            runCatching { UserId(reviewerId) }.getOrNull()
+        }
+        if (reviewers.size != req.reviewers.size) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid reviewer ids"))
+        }
+        val review = workflowRepo.submitForReview(documentId, expectedVersion, req.summary, reviewers, auth.userId)
+            ?: return@post call.respond(HttpStatusCode.Conflict, mapOf("error" to "version/state conflict"))
+        webhookNotifier.notifyReviewSubmitted(
+            documentId = documentId,
+            reviewId = review.reviewId,
+            summary = req.summary,
+            actorId = auth.userId
+        )
+        call.respond(HttpStatusCode.Accepted, review.toResponse())
+    }
+    post("/v1/documents/{id}/reviews/{reviewId}/approve") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.REVIEWER)) return@post
+        val expectedVersion = call.requireIfMatchVersion() ?: return@post
+        val documentId = call.parameters["id"]?.let { runCatching { DocumentId(it) }.getOrNull() }
+            ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
+        val reviewId = call.parameters["reviewId"]?.let { runCatching { ReviewId(it) }.getOrNull() }
+            ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid review id"))
+        if (workflowRepo.getDocument(documentId) == null) {
+            return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "document not found"))
+        }
+        val req = call.receive<ReviewDecisionRequest>()
+        val result = workflowRepo.approveReview(
+            documentId,
+            reviewId,
+            expectedVersion,
+            req.reason,
+            req.diffSummary,
+            auth.userId
+        ) ?: return@post call.respond(HttpStatusCode.Conflict, mapOf("error" to "version/state conflict"))
+        webhookNotifier.notifyDocumentPublished(
+            documentId = documentId,
+            snapshotId = result.snapshotId,
+            summary = req.diffSummary,
+            actorId = auth.userId
+        )
+        call.respond(result.toResponse())
+    }
+    post("/v1/documents/{id}/reviews/{reviewId}/request-changes") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.REVIEWER)) return@post
+        val expectedVersion = call.requireIfMatchVersion() ?: return@post
+        val documentId = call.parameters["id"]?.let { runCatching { DocumentId(it) }.getOrNull() }
+            ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
+        val reviewId = call.parameters["reviewId"]?.let { runCatching { ReviewId(it) }.getOrNull() }
+            ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid review id"))
+        if (workflowRepo.getDocument(documentId) == null) {
+            return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "document not found"))
+        }
+        val req = call.receive<ReviewDecisionRequest>()
+        val result = workflowRepo.requestChanges(
+            documentId,
+            reviewId,
+            expectedVersion,
+            req.reason,
+            req.diffSummary,
+            auth.userId
+        ) ?: return@post call.respond(HttpStatusCode.Conflict, mapOf("error" to "version/state conflict"))
+        call.respond(result.toResponse())
+    }
+    post("/v1/documents/{id}/publish") {
+        val auth = call.requireAuthContext() ?: return@post
+        val req = call.receive<PublishRequest>()
+        if (req.force) {
+            if (!call.requireAnyRole(auth, UserRole.ADMIN)) return@post
+            if (req.reason.isNullOrBlank()) {
+                return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "reason required for force publish"))
+            }
+        } else {
+            if (!call.requireAnyRole(auth, UserRole.REVIEWER)) return@post
+            if (req.reason.isNullOrBlank()) {
+                return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "reason required for publish"))
+            }
+        }
+        val expectedVersion = call.requireIfMatchVersion() ?: return@post
+        val documentId = call.parameters["id"]?.let { runCatching { DocumentId(it) }.getOrNull() }
+            ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
+        if (workflowRepo.getDocument(documentId) == null) {
+            return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "document not found"))
+        }
+        val result = workflowRepo.publish(
+            documentId,
+            expectedVersion,
+            req.force,
+            req.reason,
+            req.diffSummary,
+            auth.userId
+        ) ?: return@post call.respond(HttpStatusCode.Conflict, mapOf("error" to "version/state conflict"))
+        webhookNotifier.notifyDocumentPublished(
+            documentId = documentId,
+            snapshotId = result.snapshotId,
+            summary = req.diffSummary,
+            actorId = auth.userId
+        )
+        call.respond(result.toResponse())
+    }
+    post("/v1/documents/{id}/revert") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.EDITOR)) return@post
+        val expectedVersion = call.requireIfMatchVersion() ?: return@post
+        val documentId = call.parameters["id"]?.let { runCatching { DocumentId(it) }.getOrNull() }
+            ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
+        if (workflowRepo.getDocument(documentId) == null) {
+            return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "document not found"))
+        }
+        val req = call.receive<RevertRequest>()
+        val snapshotId = runCatching { SnapshotId(req.snapshotId) }.getOrElse {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid snapshot id"))
+        }
+        val result = workflowRepo.revert(
+            documentId,
+            expectedVersion,
+            snapshotId,
+            req.reason,
+            auth.userId
+        ) ?: return@post call.respond(HttpStatusCode.Conflict, mapOf("error" to "version/state conflict"))
+        call.respond(result.toResponse())
+    }
+    post("/v1/documents/{id}/archive") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.ADMIN)) return@post
+        val expectedVersion = call.requireIfMatchVersion() ?: return@post
+        val documentId = call.parameters["id"]?.let { runCatching { DocumentId(it) }.getOrNull() }
+            ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid document id"))
+        if (workflowRepo.getDocument(documentId) == null) {
+            return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "document not found"))
+        }
+        val req = call.receive<ArchiveRequest>()
+        if (req.reason.isBlank()) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "reason required"))
+        }
+        val result = workflowRepo.archive(documentId, expectedVersion, req.reason, auth.userId)
+            ?: return@post call.respond(HttpStatusCode.Conflict, mapOf("error" to "version/state conflict"))
+        call.respond(result.toResponse())
+    }
+    post("/v1/documents/{id}/reviews/{reviewId}/comments") {
+        val auth = call.requireAuthContext() ?: return@post
+        if (!call.requireAnyRole(auth, UserRole.EDITOR)) return@post
+        val reviewId = call.parameters["reviewId"]?.let { runCatching { ReviewId(it) }.getOrNull() }
+            ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid review id"))
+        val req = call.receive<ReviewCommentRequest>()
+        if (req.body.isBlank()) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "comment body required"))
+        }
+        val comment = workflowRepo.addReviewComment(reviewId, auth.userId, req.body)
+            ?: return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "review not found"))
+        call.respond(HttpStatusCode.Created, comment.toResponse())
     }
 }
 

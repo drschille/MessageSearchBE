@@ -24,3 +24,7 @@ search:
   weights:
     text: 0.35
     vector: 0.65
+
+webhooks:
+  reviewSubmittedUrl: ${REVIEW_SUBMITTED_WEBHOOK:}
+  documentPublishedUrl: ${DOCUMENT_PUBLISHED_WEBHOOK:}

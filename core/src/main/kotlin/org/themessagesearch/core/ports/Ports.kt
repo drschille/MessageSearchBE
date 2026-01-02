@@ -11,7 +11,8 @@ interface DocumentRepository {
         limit: Int,
         offset: Int,
         languageCode: String? = null,
-        title: String? = null
+        title: String? = null,
+        state: DocumentWorkflowState? = null
     ): DocumentListResponse
 }
 
@@ -25,6 +26,59 @@ interface AuditRepository {
     suspend fun create(event: DocumentAuditEvent): DocumentAuditEvent
     suspend fun list(documentId: DocumentId, limit: Int, cursor: String?): DocumentAuditListResult
     suspend fun findById(documentId: DocumentId, auditId: AuditId): DocumentAuditEvent?
+}
+
+interface WorkflowRepository {
+    suspend fun getDocument(documentId: DocumentId): WorkflowDocument?
+    suspend fun submitForReview(
+        documentId: DocumentId,
+        expectedVersion: Long,
+        summary: String,
+        reviewers: List<UserId>,
+        actorId: UserId
+    ): ReviewRequest?
+    suspend fun approveReview(
+        documentId: DocumentId,
+        reviewId: ReviewId,
+        expectedVersion: Long,
+        reason: String?,
+        diffSummary: String?,
+        actorId: UserId
+    ): WorkflowTransitionResult?
+    suspend fun requestChanges(
+        documentId: DocumentId,
+        reviewId: ReviewId,
+        expectedVersion: Long,
+        reason: String?,
+        diffSummary: String?,
+        actorId: UserId
+    ): WorkflowTransitionResult?
+    suspend fun publish(
+        documentId: DocumentId,
+        expectedVersion: Long,
+        force: Boolean,
+        reason: String?,
+        diffSummary: String?,
+        actorId: UserId
+    ): WorkflowTransitionResult?
+    suspend fun archive(
+        documentId: DocumentId,
+        expectedVersion: Long,
+        reason: String?,
+        actorId: UserId
+    ): WorkflowTransitionResult?
+    suspend fun revert(
+        documentId: DocumentId,
+        expectedVersion: Long,
+        snapshotId: SnapshotId,
+        reason: String?,
+        actorId: UserId
+    ): WorkflowTransitionResult?
+    suspend fun addReviewComment(
+        reviewId: ReviewId,
+        authorId: UserId,
+        body: String
+    ): ReviewComment?
 }
 
 interface EmbeddingRepository {

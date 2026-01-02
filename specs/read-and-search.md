@@ -194,3 +194,29 @@ The service unwraps `total` and `results`, ensuring API responses carry overall 
 - Answer endpoint returns text plus citations of document IDs, paragraph IDs, snapshots, and languages used.
 - OpenAPI docs available at `/openapi`; Swagger UI enabled for local testing.
 - Tests cover repository CRUD, hybrid search, and answer generation (with stubbed AI).
+
+## UI Requirements (Web/Mobile)
+### Document List
+- Web: searchable table with language filter, sortable updated_at, and state badge.
+- Mobile: stacked cards with title, language, and last updated; filter drawer for language.
+- Tablet: two-column card grid with persistent filter sidebar.
+
+### Document Detail
+- Web: multi-column layout with paragraph anchors and a snapshot/version badge.
+- Mobile: single-column layout with collapsible paragraphs and sticky title.
+- Tablet: split view with document body and a collapsible paragraph outline.
+
+### Search Results
+- Web: results list with snippet highlighting and optional debug toggle for scores.
+- Mobile: compact cards with snippet and tap-through to paragraph in document view.
+- Tablet: dual-pane list + preview with quick jump to paragraph.
+
+### Answer View
+- Web: answer text above a citations panel that links to paragraphs/snapshots.
+- Mobile: answer first, citations as expandable list with jump-to actions.
+- Tablet: answer and citations side-by-side with sticky citation list.
+
+### Embed Backfill (Admin)
+- Web: simple form with batch size and cursor, plus last-run output.
+- Mobile: minimal form with inline validation and success/error toast.
+- Tablet: form with history panel showing recent runs.

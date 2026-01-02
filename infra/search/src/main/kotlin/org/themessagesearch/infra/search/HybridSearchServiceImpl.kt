@@ -49,6 +49,7 @@ class HybridSearchServiceImpl(
                 LEFT JOIN paragraph_text_hits th ON th.id = p.id
                 LEFT JOIN paragraph_vec_hits vh ON vh.id = p.id
                 WHERE (coalesce(th.text_score,0) > 0 OR coalesce(vh.vec_score,0) > 0)
+                  AND d.workflow_state = 'published'
                   AND (? IS NULL OR p.language_code = ?)
             )
             SELECT paragraph_id, document_id, language_code, title, snapshot_id, version, snippet, text_score, vec_score, final_score,

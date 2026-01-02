@@ -43,6 +43,7 @@ data class Document(
     val title: String,
     val body: String,
     val version: Long,
+    val workflowState: DocumentWorkflowState,
     val languageCode: String,
     val paragraphs: List<DocumentParagraph>,
     val snapshotId: SnapshotId? = null,
@@ -63,7 +64,7 @@ data class DocumentCreateRequest(
     val title: String,
     val languageCode: String,
     val paragraphs: List<DocumentParagraphInput>,
-    val publish: Boolean = true
+    val publish: Boolean = false
 )
 
 @Serializable
@@ -103,6 +104,7 @@ data class DocumentResponse(
     val title: String,
     val body: String,
     val version: Long,
+    val workflowState: DocumentWorkflowState,
     val snapshotId: String? = null,
     val languageCode: String,
     val paragraphs: List<DocumentParagraphResponse>,
@@ -114,6 +116,7 @@ data class DocumentResponse(
 data class DocumentListItem(
     val id: String,
     val title: String,
+    val workflowState: DocumentWorkflowState,
     val languageCode: String,
     val createdAt: Instant,
     val updatedAt: Instant
@@ -205,6 +208,7 @@ fun Document.toResponse(): DocumentResponse = DocumentResponse(
     title = title,
     body = body,
     version = version,
+    workflowState = workflowState,
     snapshotId = snapshotId?.value,
     languageCode = languageCode,
     paragraphs = paragraphs.map {

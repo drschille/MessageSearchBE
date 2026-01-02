@@ -86,3 +86,23 @@ Expose `GET /v1/users/{id}/audits?limit&cursor` for admin-only access.
 - Password-based auth, MFA, or token issuance.
 - Multi-tenant ACLs; roles are single-tenant and coarse-grained.
 
+## UI Requirements (Web/Mobile)
+### User List
+- Web: admin table with role badges, status, and last updated.
+- Mobile: card list with role chips and status toggle access for admins.
+- Tablet: two-column list with quick filters pinned.
+
+### User Detail
+- Web: profile header with roles, status, and audit timeline.
+- Mobile: tabbed view (Profile, Roles, Audits) with sticky actions.
+- Tablet: side-by-side profile and audits panels.
+
+### Role Management
+- Web: multi-select roles with confirmation and required reason prompt.
+- Mobile: checklist modal with reason input and clear role descriptions.
+- Tablet: inline editor with role chips and reason drawer.
+
+### Status Changes
+- Web: enable/disable toggle with confirmation and audit link.
+- Mobile: destructive action sheet with reason required.
+- Tablet: toggle plus side panel confirmation.

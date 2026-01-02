@@ -181,8 +181,8 @@ class ExposedAuditRepository : AuditRepository {
         actorId = UserId(this[DocumentAuditsTable.actorId].toString()),
         action = this[DocumentAuditsTable.action].toDocumentAuditAction(),
         reason = this[DocumentAuditsTable.reason],
-        fromState = this[DocumentAuditsTable.fromState]?.toSnapshotState(),
-        toState = this[DocumentAuditsTable.toState]?.toSnapshotState(),
+        fromState = this[DocumentAuditsTable.fromState]?.toWorkflowState(),
+        toState = this[DocumentAuditsTable.toState]?.toWorkflowState(),
         snapshotId = this[DocumentAuditsTable.snapshotId]?.let { SnapshotId(it.toString()) },
         diffSummary = this[DocumentAuditsTable.diffSummary],
         requestId = this[DocumentAuditsTable.requestId],
@@ -204,15 +204,19 @@ class ExposedAuditRepository : AuditRepository {
     private data class ParsedCursor(val createdAt: java.time.OffsetDateTime, val auditId: UUID)
 }
 
-private fun String.toSnapshotState(): SnapshotState = when (this) {
-    "published" -> SnapshotState.PUBLISHED
-    "archived" -> SnapshotState.ARCHIVED
-    else -> error("Unknown snapshot state $this")
+private fun String.toWorkflowState(): DocumentWorkflowState = when (this) {
+    "draft" -> DocumentWorkflowState.DRAFT
+    "in_review" -> DocumentWorkflowState.IN_REVIEW
+    "published" -> DocumentWorkflowState.PUBLISHED
+    "archived" -> DocumentWorkflowState.ARCHIVED
+    else -> error("Unknown workflow state $this")
 }
 
-private fun SnapshotState.dbValue(): String = when (this) {
-    SnapshotState.PUBLISHED -> "published"
-    SnapshotState.ARCHIVED -> "archived"
+private fun DocumentWorkflowState.dbValue(): String = when (this) {
+    DocumentWorkflowState.DRAFT -> "draft"
+    DocumentWorkflowState.IN_REVIEW -> "in_review"
+    DocumentWorkflowState.PUBLISHED -> "published"
+    DocumentWorkflowState.ARCHIVED -> "archived"
 }
 
 private fun String.toDocumentAuditAction(): DocumentAuditAction = when (this) {

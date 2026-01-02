@@ -5,7 +5,7 @@ WORKDIR /workspace
 COPY gradle gradle
 COPY gradlew gradlew
 COPY gradlew.bat gradlew.bat
-COPY settings.gradle.kts build.gradle.kts gradle.properties ./
+COPY settings.gradle.kts gradle.properties ./
 COPY buildSrc buildSrc
 COPY core core
 COPY infra infra

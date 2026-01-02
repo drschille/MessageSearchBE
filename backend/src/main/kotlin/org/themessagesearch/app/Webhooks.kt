@@ -5,6 +5,7 @@ import org.themessagesearch.core.model.ReviewId
 import org.themessagesearch.core.model.SnapshotId
 import org.themessagesearch.core.model.UserId
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
 import java.time.Instant
 
@@ -34,7 +35,7 @@ class WebhookNotifier(private val config: WebhookConfig, private val logger: (St
 
     private fun postJson(targetUrl: String, payload: String) {
         runCatching {
-            val conn = URL(targetUrl).openConnection() as HttpURLConnection
+            val conn = targetUrl.toUrl().openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.doOutput = true
@@ -48,4 +49,6 @@ class WebhookNotifier(private val config: WebhookConfig, private val logger: (St
 
     private fun escape(raw: String): String =
         raw.replace("\\", "\\\\").replace("\"", "\\\"")
+
+    private fun String.toUrl(): URL = URI(this).toURL()
 }

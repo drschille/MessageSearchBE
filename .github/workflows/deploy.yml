@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: Deploy
 
 on:
   push:
@@ -59,15 +59,18 @@ jobs:
           source: "docker-compose.prod.yml,infra/db/src/main/resources/db/migration,deploy/nginx.conf,deploy/nginx-bootstrap.conf,deploy/certbot-init.sh"
           target: ${{ secrets.SERVER_APP_DIR }}
 
-      - name: Log in to GHCR on server
-        if: ${{ secrets.GHCR_TOKEN != '' }}
+      - name: Log in to GHCR on server (optional)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+            if [ -n "${{ secrets.GHCR_TOKEN }}" ] && [ -n "${{ secrets.GHCR_USERNAME }}" ]; then
+              echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+            else
+              echo "GHCR creds not set; skipping docker login."
+            fi
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3

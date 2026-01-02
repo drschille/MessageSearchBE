@@ -199,6 +199,27 @@ WebSocket frames should carry binary update payloads to avoid base64 overhead (J
     - max single update bytes (configurable; protect memory)
     - max batch size returned per request (`limit` capped)
 
+## UI Requirements (Web/Mobile)
+### Presence and Editing
+- Web: show active editors list and a "live" indicator for connected status.
+- Mobile: compact presence avatars and a sync status chip in the header.
+- Tablet: inline presence row above the editor with expandable user list.
+
+### Offline and Sync
+- Web: explicit "offline" banner with retry controls and last sync time.
+- Mobile: lightweight toast for sync failures and auto-retry indicator.
+- Tablet: banner with sync diagnostics drawer.
+
+### Conflict Handling
+- Web: highlight contested ranges with inline resolution tools.
+- Mobile: show conflict list with tap-to-jump and accept/merge actions.
+- Tablet: split diff view with conflict list on the side.
+
+### Snapshot Restore
+- Web: allow restoring from latest collab snapshot with confirmation.
+- Mobile: single action for "restore last snapshot" with undo hint.
+- Tablet: restore action in a toolbar with confirmation panel.
+
 ---
 
 ## Observability

@@ -66,3 +66,34 @@ All transitions must fail if the caller lacks the required role, if the document
 - `POST /v1/documents/{id}/archive` – deprecate (Admin)
 
 Each endpoint must validate JWT roles, enforce optimistic locking via `If-Match`/ETag or version numbers, and return audit IDs for logging.
+
+## UI Requirements (Web/Mobile)
+### Workflow State
+- Web: persistent state badge with version number and last updated timestamp.
+- Mobile: compact state pill next to title with tap-to-expand details.
+- Tablet: header row with state, version, and quick actions.
+
+### Review Submission
+- Web: modal with summary, reviewer picker, and required change summary.
+- Mobile: full-screen form with reviewer list and inline validation.
+- Tablet: split form with reviewer list on the right.
+
+### Review Actions
+- Web: approve/request-changes buttons gated by role with reason input.
+- Mobile: action sheet with approve/request-changes and reason prompt.
+- Tablet: inline action bar with reason drawer.
+
+### Force Publish
+- Web: admin-only flow with prominent warning and required reason.
+- Mobile: admin-only confirmation screen with reason text area.
+- Tablet: warning banner with two-step confirmation.
+
+### Archive/Revert
+- Web: archive/revert actions in a "More" menu with confirmation and reason.
+- Mobile: destructive action sheet with undo guidance and audit link.
+- Tablet: context menu with side panel confirmation.
+
+### Review Comments
+- Web: threaded side panel tied to review with timestamps and author labels.
+- Mobile: inline comments list with add-comment composer at bottom.
+- Tablet: dual-pane view with comments in a right rail.

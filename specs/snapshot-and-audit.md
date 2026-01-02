@@ -88,3 +88,23 @@ Pagination must be cursor-based and stable across concurrent writes.
 ## Data Retention
 - Snapshots are retained indefinitely by default.
 - Audit events are retained indefinitely; redaction is handled via encryption or field-level masking, not deletion.
+
+## UI Requirements (Web/Mobile)
+### Snapshot List
+- Web: timeline list with version, state, created_at, and action buttons (view/revert).
+- Mobile: stacked timeline cards with state pill and tap-to-open snapshot detail.
+- Tablet: split list/detail with persistent timeline on the left.
+
+### Snapshot Detail
+- Web: diff-aware view with metadata panel (version, created_by, created_at).
+- Mobile: single-column view with metadata drawer and scroll-to-section anchors.
+- Tablet: side panel for metadata and diff controls.
+
+### Audit Timeline
+- Web: filterable timeline (action, actor, date range) with diff summary preview.
+- Mobile: chronological feed with expandable audit entries and reason text.
+- Tablet: filter chips row with two-column timeline layout.
+
+### Redaction Handling
+- Web/Mobile: redact reason/IP fields in UI by default; reveal requires admin role.
+- Tablet: same as web, plus inline reveal for privileged users.

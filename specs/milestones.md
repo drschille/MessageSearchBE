@@ -19,11 +19,11 @@ Effort key: S = 0.5–2 days, M = 3–5 days, L = 6–10 days, XL = 2+ weeks.
 - [x] Search and answer cite `snapshot_id` and version (M)
 
 ## M2 - Editorial Workflow
-- [ ] Workflow state model + persistence (L)
-- [ ] Draft/review/publish/archive transition endpoints (L)
-- [ ] Optimistic locking for transitions (M)
-- [ ] Review notes/comments storage (M)
-- [ ] Publish/review notifications (webhook first) (M–L)
+- [x] Workflow state model + persistence (L)
+- [x] Draft/review/publish/archive transition endpoints (L)
+- [x] Optimistic locking for transitions (M)
+- [x] Review notes/comments storage (M)
+- [x] Publish/review notifications (webhook first) (M–L)
 
 ## M3 - Collaboration Realtime
 - [ ] WebSocket realtime sync for collab updates (L)

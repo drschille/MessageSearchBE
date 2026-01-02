@@ -8,6 +8,7 @@ import org.themessagesearch.infra.db.repo.ExposedDocumentRepository
 import org.themessagesearch.infra.db.repo.ExposedEmbeddingRepository
 import org.themessagesearch.infra.db.repo.ExposedSnapshotRepository
 import org.themessagesearch.infra.db.repo.ExposedAuditRepository
+import org.themessagesearch.infra.db.repo.ExposedWorkflowRepository
 import org.themessagesearch.infra.db.repo.ExposedUserRepository
 import org.themessagesearch.infra.search.HybridSearchServiceImpl
 import org.themessagesearch.infra.search.AnswerServiceImpl
@@ -22,11 +23,13 @@ object ServiceRegistry {
         val collaborationRepo: CollaborationRepository,
         val snapshotRepo: SnapshotRepository,
         val auditRepo: AuditRepository,
+        val workflowRepo: WorkflowRepository,
         val userRepo: UserRepository,
         val searchService: HybridSearchService,
         val answerService: AnswerService,
         val backfillService: EmbeddingBackfillService,
-        val openApiSpec: Map<String, Any>
+        val openApiSpec: Map<String, Any>,
+        val webhookNotifier: org.themessagesearch.app.WebhookNotifier
     )
 
     fun init(cfg: AppConfig): Registry {
@@ -40,10 +43,14 @@ object ServiceRegistry {
         val collabRepo = ExposedCollaborationRepository()
         val snapshotRepo = ExposedSnapshotRepository()
         val auditRepo = ExposedAuditRepository()
+        val workflowRepo = ExposedWorkflowRepository()
         val userRepo = ExposedUserRepository()
         val search = HybridSearchServiceImpl(embeddingClient, candidateK = cfg.search.k)
         val answer = AnswerServiceImpl(search, chatClient)
         val backfill = EmbeddingBackfillServiceImpl(docRepo, embRepo, embeddingClient)
+        val webhookNotifier = org.themessagesearch.app.WebhookNotifier(cfg.webhooks) { msg ->
+            println(msg)
+        }
 
         val openApi = mapOf(
             "openapi" to "3.0.0",
@@ -79,6 +86,7 @@ object ServiceRegistry {
                                             "title" to "Sample title",
                                             "body" to "First paragraph.\n\nSecond paragraph.",
                                             "version" to 1,
+                                            "workflowState" to "published",
                                             "snapshotId" to "9c2f2b2d-5aef-4b36-9e64-0a7e3c6af9cb",
                                             "languageCode" to "en-US",
                                             "paragraphs" to listOf(
@@ -186,6 +194,7 @@ object ServiceRegistry {
                                                         "title" to "Sample title",
                                                         "body" to "First paragraph.",
                                                         "version" to 1,
+                                                        "workflowState" to "published",
                                                         "snapshotId" to "9c2f2b2d-5aef-4b36-9e64-0a7e3c6af9cb",
                                                         "languageCode" to "en-US",
                                                         "paragraphs" to listOf(
@@ -257,6 +266,7 @@ object ServiceRegistry {
                                             "title" to "Sample title",
                                             "body" to "First paragraph.\n\nSecond paragraph.",
                                             "version" to 1,
+                                            "workflowState" to "published",
                                             "snapshotId" to "9c2f2b2d-5aef-4b36-9e64-0a7e3c6af9cb",
                                             "languageCode" to "en-US",
                                             "paragraphs" to listOf(
@@ -884,6 +894,7 @@ object ServiceRegistry {
                             "title" to mapOf("type" to "string"),
                             "body" to mapOf("type" to "string"),
                             "version" to mapOf("type" to "integer"),
+                            "workflowState" to mapOf("type" to "string"),
                             "snapshotId" to mapOf("type" to "string", "format" to "uuid", "nullable" to true),
                             "languageCode" to mapOf("type" to "string"),
                             "paragraphs" to mapOf(
@@ -893,7 +904,7 @@ object ServiceRegistry {
                             "createdAt" to mapOf("type" to "string", "format" to "date-time"),
                             "updatedAt" to mapOf("type" to "string", "format" to "date-time")
                         ),
-                        "required" to listOf("id", "title", "body", "version", "languageCode", "paragraphs", "createdAt", "updatedAt")
+                        "required" to listOf("id", "title", "body", "version", "workflowState", "languageCode", "paragraphs", "createdAt", "updatedAt")
                     ),
                     "DocumentCreateBatchResult" to mapOf(
                         "type" to "object",
@@ -1126,11 +1137,13 @@ object ServiceRegistry {
             collaborationRepo = collabRepo,
             snapshotRepo = snapshotRepo,
             auditRepo = auditRepo,
+            workflowRepo = workflowRepo,
             userRepo = userRepo,
             searchService = search,
             answerService = answer,
             backfillService = backfill,
-            openApiSpec = openApi
+            openApiSpec = openApi,
+            webhookNotifier = webhookNotifier
         )
     }
 }

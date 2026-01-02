@@ -20,6 +20,7 @@ object DocumentsTable : UUIDTable("documents") {
     val title = text("title")
     val body = text("body")
     val version = long("version")
+    val workflowState = text("workflow_state")
     val languageCode = text("language_code")
     val createdAt = timestampWithTimeZone("created_at")
     val updatedAt = timestampWithTimeZone("updated_at")
@@ -54,17 +55,19 @@ class ExposedDocumentRepository : DocumentRepository {
         val offsetNow = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         val aggregateBody = normalizedParagraphs.joinToString("\n\n") { it.body }
         val snapshotId = if (request.publish) SnapshotId.random() else null
+        val workflowState = if (request.publish) DocumentWorkflowState.PUBLISHED else DocumentWorkflowState.DRAFT
         val id = DocumentsTable.insertAndGetId {
             it[title] = request.title
             it[body] = aggregateBody
             it[version] = 1
+            it[DocumentsTable.workflowState] = workflowState.dbValue()
             it[languageCode] = request.languageCode
             it[createdAt] = offsetNow
             it[updatedAt] = offsetNow
             it[DocumentsTable.snapshotId] = null
         }
         val auditAction = if (request.publish) "publish" else "draft.created"
-        val auditToState = if (request.publish) "published" else null
+        val auditToState = if (request.publish) DocumentWorkflowState.PUBLISHED.dbValue() else DocumentWorkflowState.DRAFT.dbValue()
         DocumentAuditsTable.insert {
             it[id] = UUID.randomUUID()
             it[documentId] = id.value
@@ -164,7 +167,8 @@ class ExposedDocumentRepository : DocumentRepository {
         limit: Int,
         offset: Int,
         languageCode: String?,
-        title: String?
+        title: String?,
+        state: DocumentWorkflowState?
     ): DocumentListResponse = transaction {
         val countQuery = DocumentsTable.selectAll()
         languageCode?.let { lang ->
@@ -172,6 +176,9 @@ class ExposedDocumentRepository : DocumentRepository {
         }
         title?.let { t ->
             countQuery.andWhere { DocumentsTable.title eq t }
+        }
+        state?.let { desired ->
+            countQuery.andWhere { DocumentsTable.workflowState eq desired.dbValue() }
         }
         val total = countQuery.count()
         val listQuery = DocumentsTable.selectAll()
@@ -181,6 +188,9 @@ class ExposedDocumentRepository : DocumentRepository {
         title?.let { t ->
             listQuery.andWhere { DocumentsTable.title eq t }
         }
+        state?.let { desired ->
+            listQuery.andWhere { DocumentsTable.workflowState eq desired.dbValue() }
+        }
         val items = listQuery
             .orderBy(DocumentsTable.updatedAt to SortOrder.DESC)
             .limit(limit, offset.toLong())
@@ -188,6 +198,7 @@ class ExposedDocumentRepository : DocumentRepository {
                 DocumentListItem(
                     id = row[DocumentsTable.id].value.toString(),
                     title = row[DocumentsTable.title],
+                    workflowState = row[DocumentsTable.workflowState].toWorkflowState(),
                     languageCode = row[DocumentsTable.languageCode],
                     createdAt = row[DocumentsTable.createdAt].toInstant().toKotlinInstant(),
                     updatedAt = row[DocumentsTable.updatedAt].toInstant().toKotlinInstant()
@@ -228,6 +239,7 @@ class ExposedDocumentRepository : DocumentRepository {
         title = this[DocumentsTable.title],
         body = this[DocumentsTable.body],
         version = this[DocumentsTable.version],
+        workflowState = this[DocumentsTable.workflowState].toWorkflowState(),
         languageCode = this[DocumentsTable.languageCode],
         paragraphs = paragraphs,
         snapshotId = this[DocumentsTable.snapshotId]?.let { SnapshotId(it.toString()) },
@@ -245,11 +257,13 @@ private fun ResultRow.toSnapshotDocument(): Document {
         .select { DocumentParagraphsTable.documentId eq EntityID(docId, DocumentsTable) }
         .orderBy(DocumentParagraphsTable.position to SortOrder.ASC)
         .map { it.toParagraphRow() }
+    val snapshotState = this[SnapshotsTable.state]
     return Document(
         id = DocumentId(this[SnapshotsTable.documentId].toString()),
         title = this[SnapshotsTable.title],
         body = this[SnapshotsTable.body],
         version = this[SnapshotsTable.version],
+        workflowState = if (snapshotState == "archived") DocumentWorkflowState.ARCHIVED else DocumentWorkflowState.PUBLISHED,
         languageCode = this[SnapshotsTable.languageCode],
         paragraphs = paragraphs,
         snapshotId = SnapshotId(this[SnapshotsTable.id].value.toString()),
@@ -268,6 +282,21 @@ private fun ResultRow.toParagraphRow(): DocumentParagraph = DocumentParagraph(
     createdAt = this[DocumentParagraphsTable.createdAt].toInstant().toKotlinInstant(),
     updatedAt = this[DocumentParagraphsTable.updatedAt].toInstant().toKotlinInstant()
 )
+
+private fun DocumentWorkflowState.dbValue(): String = when (this) {
+    DocumentWorkflowState.DRAFT -> "draft"
+    DocumentWorkflowState.IN_REVIEW -> "in_review"
+    DocumentWorkflowState.PUBLISHED -> "published"
+    DocumentWorkflowState.ARCHIVED -> "archived"
+}
+
+private fun String.toWorkflowState(): DocumentWorkflowState = when (this) {
+    "draft" -> DocumentWorkflowState.DRAFT
+    "in_review" -> DocumentWorkflowState.IN_REVIEW
+    "published" -> DocumentWorkflowState.PUBLISHED
+    "archived" -> DocumentWorkflowState.ARCHIVED
+    else -> error("Unknown workflow state $this")
+}
 
 class ExposedEmbeddingRepository : EmbeddingRepository {
     private val dim = 1536

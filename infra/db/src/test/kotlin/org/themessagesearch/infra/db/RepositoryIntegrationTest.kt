@@ -9,6 +9,7 @@ import org.themessagesearch.core.model.CollaborationUpdate
 import org.themessagesearch.core.model.DocumentCreateRequest
 import org.themessagesearch.core.model.DocumentParagraphInput
 import org.themessagesearch.core.model.DocumentAuditAction
+import org.themessagesearch.core.model.DocumentWorkflowState
 import org.themessagesearch.core.model.SnapshotState
 import org.themessagesearch.core.model.UserAuditAction
 import org.themessagesearch.core.model.UserCreateRequest
@@ -21,6 +22,7 @@ import org.themessagesearch.infra.db.repo.ExposedCollaborationRepository
 import org.themessagesearch.infra.db.repo.ExposedSnapshotRepository
 import org.themessagesearch.infra.db.repo.ExposedAuditRepository
 import org.themessagesearch.infra.db.repo.ExposedUserRepository
+import org.themessagesearch.infra.db.repo.ExposedWorkflowRepository
 import kotlinx.coroutines.runBlocking
 import kotlin.random.Random
 import java.util.UUID
@@ -33,6 +35,7 @@ class RepositoryIntegrationTest {
     private val collabRepo = ExposedCollaborationRepository()
     private val snapshotRepo = ExposedSnapshotRepository()
     private val auditRepo = ExposedAuditRepository()
+    private val workflowRepo = ExposedWorkflowRepository()
     private val userRepo = ExposedUserRepository()
     private val actorId = UserId(UUID.randomUUID().toString())
 
@@ -216,7 +219,7 @@ class RepositoryIntegrationTest {
     @Test
     fun `snapshot and audit created on publish`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(sampleRequest("Snapshot doc", "Snapshot body"), actorId)
+        val doc = docRepo.create(sampleRequest("Snapshot doc", "Snapshot body", publish = true), actorId)
         val snapshots = snapshotRepo.list(doc.id, limit = 10, cursor = null)
         assertEquals(1, snapshots.items.size)
         val snapshot = snapshots.items.first()
@@ -232,11 +235,51 @@ class RepositoryIntegrationTest {
         assertEquals(snapshot.snapshotId.value, audit.snapshotId?.value)
     }
 
-    private fun sampleRequest(title: String, body: String, languageCode: String = "en-US"): DocumentCreateRequest {
+    @Test
+    fun `workflow review approve and archive`() = runBlocking {
+        assumeTrue(postgres != null)
+        val doc = docRepo.create(sampleRequest("Workflow doc", "Draft body"), actorId)
+        assertEquals(DocumentWorkflowState.DRAFT, doc.workflowState)
+        val review = workflowRepo.submitForReview(
+            doc.id,
+            expectedVersion = doc.version,
+            summary = "ready for review",
+            reviewers = listOf(actorId),
+            actorId = actorId
+        )
+        assertNotNull(review)
+        val approve = workflowRepo.approveReview(
+            doc.id,
+            review!!.reviewId,
+            expectedVersion = doc.version + 1,
+            reason = "looks good",
+            diffSummary = "initial publish",
+            actorId = actorId
+        )
+        assertNotNull(approve)
+        assertEquals(DocumentWorkflowState.PUBLISHED, approve!!.state)
+        assertNotNull(approve.snapshotId)
+
+        val archive = workflowRepo.archive(
+            doc.id,
+            expectedVersion = approve.version,
+            reason = "deprecated",
+            actorId = actorId
+        )
+        assertNotNull(archive)
+        assertEquals(DocumentWorkflowState.ARCHIVED, archive!!.state)
+    }
+
+    private fun sampleRequest(
+        title: String,
+        body: String,
+        languageCode: String = "en-US",
+        publish: Boolean = false
+    ): DocumentCreateRequest {
         val paragraphs = body.split("\n\n").mapIndexed { idx, text ->
             DocumentParagraphInput(position = idx, heading = null, body = text, languageCode = languageCode)
         }
-        return DocumentCreateRequest(title = title, languageCode = languageCode, paragraphs = paragraphs)
+        return DocumentCreateRequest(title = title, languageCode = languageCode, paragraphs = paragraphs, publish = publish)
     }
 
     private fun randomVector(): FloatArray = FloatArray(1536) { Random.nextFloat() }

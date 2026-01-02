@@ -16,6 +16,7 @@ data class AppConfig(
     val jwt: JwtConfig,
     val ai: AiConfig,
     val search: SearchConfig,
+    val webhooks: WebhookConfig
 )
 
 object ConfigLoader {
@@ -29,6 +30,7 @@ object ConfigLoader {
         val secMap = (yaml["security"] as Map<String, Any?>)["jwt"] as Map<String, Any?>
         val searchMap = yaml["search"] as Map<String, Any?>
         val weightsMap = searchMap["weights"] as Map<String, Any?>
+        val webhookMap = yaml["webhooks"] as? Map<String, Any?> ?: emptyMap()
 
         fun env(name: String, default: String? = null): String? = System.getenv(name) ?: default
 
@@ -53,7 +55,10 @@ object ConfigLoader {
                 vector = weightsMap["vector"].toString().toDouble()
             )
         )
-        return AppConfig(db = dbCfg, jwt = jwtCfg, ai = aiCfg, search = searchCfg)
+        val webhooksCfg = WebhookConfig(
+            reviewSubmittedUrl = webhookMap["reviewSubmittedUrl"]?.toString(),
+            documentPublishedUrl = webhookMap["documentPublishedUrl"]?.toString()
+        )
+        return AppConfig(db = dbCfg, jwt = jwtCfg, ai = aiCfg, search = searchCfg, webhooks = webhooksCfg)
     }
 }
-

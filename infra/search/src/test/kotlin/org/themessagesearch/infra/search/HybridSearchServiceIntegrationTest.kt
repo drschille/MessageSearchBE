@@ -106,11 +106,16 @@ class HybridSearchServiceIntegrationTest {
         assertEquals(doc.snapshotId?.value, result.snapshotId)
     }
 
-    private fun sampleRequest(title: String, body: String, languageCode: String = "en-US"): DocumentCreateRequest {
+    private fun sampleRequest(
+        title: String,
+        body: String,
+        languageCode: String = "en-US",
+        publish: Boolean = true
+    ): DocumentCreateRequest {
         val paragraphs = body.split("\n\n").mapIndexed { idx, text ->
             DocumentParagraphInput(position = idx, heading = null, body = text, languageCode = languageCode)
         }
-        return DocumentCreateRequest(title = title, languageCode = languageCode, paragraphs = paragraphs)
+        return DocumentCreateRequest(title = title, languageCode = languageCode, paragraphs = paragraphs, publish = publish)
     }
 
     private class StubEmbeddingClient(val dimension: Int) : EmbeddingClient {

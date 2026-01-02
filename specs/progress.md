@@ -17,11 +17,11 @@ Status is a quick snapshot and may lag behind active work.
 - [ ] Real AI providers (embeddings + chat) configurable by `application.yaml`
 
 ## Editorial Workflow
-- [ ] Workflow state model + persistence (Draft/InReview/Published/Archived)
-- [ ] Transition endpoints (submit, approve, request changes, publish, archive, revert)
-- [ ] Optimistic locking for transitions
-- [ ] Review notes/comments storage and retention
-- [ ] Notifications/webhooks for review/publish events
+- [x] Workflow state model + persistence (Draft/InReview/Published/Archived)
+- [x] Transition endpoints (submit, approve, request changes, publish, archive, revert)
+- [x] Optimistic locking for transitions
+- [x] Review notes/comments storage and retention
+- [x] Notifications/webhooks for review/publish events
 
 ## Snapshot & Audit
 - [x] Snapshot persistence (schema + repository)

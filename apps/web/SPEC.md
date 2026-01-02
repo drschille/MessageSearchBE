@@ -52,6 +52,11 @@ Frontend product surface for MessageSearch. This app provides document search, e
 - Role edit flow with reason prompt.
 - Status toggle with confirmation.
 
+### Admin Tools
+- Create user form (email, display name, roles).
+- Role assignment editor with required reason.
+- Status enable/disable with confirmation and audit link.
+
 ## API Dependencies
 - Search + Answer: `POST /v1/search`, `POST /v1/answer`
 - Documents: `POST /v1/documents`, `GET /v1/documents/{id}`, review/publish/archive/revert endpoints

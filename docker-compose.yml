@@ -10,3 +10,16 @@ services:
   adminer:
     image: adminer
     ports: ["8081:8080"]
+  flyway:
+    image: flyway/flyway:11
+    environment:
+      FLYWAY_URL: jdbc:postgresql://db:5432/app
+      FLYWAY_USER: postgres
+      FLYWAY_PASSWORD: postgres
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+    command: ["-connectRetries=60", "migrate"]
+    volumes:
+      - ./infra/db/src/main/resources/db/migration:/flyway/sql
+    depends_on:
+      db:
+        condition: service_healthy

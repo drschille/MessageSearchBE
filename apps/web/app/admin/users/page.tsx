@@ -40,17 +40,35 @@ export default function AdminUsersPage() {
   });
   const [roleEdits, setRoleEdits] = useState<Record<string, RoleEditState>>({});
   const [statusReasons, setStatusReasons] = useState<Record<string, string>>({});
+  const [deleteReasons, setDeleteReasons] = useState<Record<string, string>>({});
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<string | null>(null);
 
-  const loadUsers = async (options?: { preserve?: boolean }) => {
+  const loadUsers = async (options?: {
+    preserve?: boolean;
+    cursor?: string | null;
+    append?: boolean;
+  }) => {
     if (!options?.preserve) {
       setLoading(true);
     }
     setError(null);
     try {
-      const data = await apiFetch<User[] | UserListResponse>("/v1/users");
+      const params = new URLSearchParams();
+      if (showDeleted) {
+        params.set("include_deleted", "true");
+      }
+      if (options?.cursor) {
+        params.set("cursor", options.cursor);
+      }
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const data = await apiFetch<User[] | UserListResponse>(`/v1/users${query}`);
       const items = Array.isArray(data) ? data : data.items;
-      setUsers(items);
+      const cursor = Array.isArray(data) ? null : data.nextCursor || null;
+      setNextCursor(cursor);
+      setUsers((prev) => (options?.append ? [...prev, ...items] : items));
       setRoleEdits((prev) => {
         const next = { ...prev };
         items.forEach((user) => {
@@ -74,7 +92,7 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     void loadUsers();
-  }, []);
+  }, [showDeleted]);
 
   const submitCreateUser = async () => {
     setSubmitStatus(null);
@@ -136,6 +154,45 @@ export default function AdminUsersPage() {
       setSubmitStatus("Status updated.");
     } catch (err) {
       setSubmitStatus(err instanceof Error ? err.message : "Status update failed.");
+    }
+  };
+
+  const deleteUser = async (user: User) => {
+    const reason = deleteReasons[user.id] || "";
+    if (!reason.trim()) {
+      setSubmitStatus("Delete reason is required.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Delete ${user.displayName || user.email || user.id}?`
+    );
+    if (!confirmed) {
+      return;
+    }
+    setSubmitStatus(null);
+    try {
+      const updated = await apiFetch<User>(`/v1/users/${user.id}`, {
+        method: "DELETE",
+        body: JSON.stringify({ reason })
+      });
+      setUsers((prev) =>
+        prev.map((entry) => (entry.id === user.id ? updated : entry))
+      );
+      setSubmitStatus("User deleted.");
+    } catch (err) {
+      setSubmitStatus(err instanceof Error ? err.message : "Delete failed.");
+    }
+  };
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) {
+      return;
+    }
+    setLoadingMore(true);
+    try {
+      await loadUsers({ preserve: true, cursor: nextCursor, append: true });
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -209,9 +266,19 @@ export default function AdminUsersPage() {
         <section className="card stack">
           <div className="row" style={{ justifyContent: "space-between" }}>
             <h2>Users</h2>
-            <button className="button secondary" onClick={loadUsers}>
-              Refresh
-            </button>
+            <div className="row">
+              <label className="badge">
+                <input
+                  type="checkbox"
+                  checked={showDeleted}
+                  onChange={(event) => setShowDeleted(event.target.checked)}
+                />
+                Show deleted
+              </label>
+              <button className="button secondary" onClick={loadUsers}>
+                Refresh
+              </button>
+            </div>
           </div>
           {loading && <p>Loading users...</p>}
           {error && <p>{error}</p>}
@@ -306,6 +373,17 @@ export default function AdminUsersPage() {
                       </td>
                       <td>
                         <div className="stack">
+                          <input
+                            className="input"
+                            placeholder="Delete reason"
+                            value={deleteReasons[user.id] || ""}
+                            onChange={(event) =>
+                              setDeleteReasons((prev) => ({
+                                ...prev,
+                                [user.id]: event.target.value
+                              }))
+                            }
+                          />
                           <button
                             className="button secondary"
                             onClick={() => updateRoles(user.id)}
@@ -315,10 +393,17 @@ export default function AdminUsersPage() {
                           <button
                             className="button"
                             onClick={() => toggleStatus(user)}
+                            disabled={user.status === "deleted"}
                           >
                             {user.status === "active"
                               ? "Disable"
                               : "Enable"}
+                          </button>
+                          <button
+                            className="button secondary"
+                            onClick={() => deleteUser(user)}
+                          >
+                            Delete
                           </button>
                         </div>
                       </td>
@@ -327,6 +412,11 @@ export default function AdminUsersPage() {
                 })}
               </tbody>
             </table>
+          )}
+          {!loading && nextCursor && (
+            <button className="button secondary" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? "Loading..." : "Load more"}
+            </button>
           )}
         </section>
 

@@ -95,9 +95,12 @@ class ExposedUserRepository : UserRepository {
         profile
     }
 
-    override suspend fun listUsers(limit: Int, cursor: String?): UserListResult = transaction {
+    override suspend fun listUsers(limit: Int, cursor: String?, includeDeleted: Boolean): UserListResult = transaction {
         val parsedCursor = cursor?.let { parseCursor(it) }
         val base = UsersTable.selectAll()
+        if (!includeDeleted) {
+            base.andWhere { UsersTable.status neq UserStatus.DELETED.dbValue() }
+        }
         if (parsedCursor != null) {
             val cursorEntity = EntityID(parsedCursor.userId, UsersTable)
             base.andWhere {
@@ -215,6 +218,33 @@ class ExposedUserRepository : UserRepository {
         row.copy(
             row = row,
             status = status,
+            updatedAt = now,
+            roles = roles
+        )
+    }
+
+    override suspend fun deleteUser(userId: UserId, actorId: UserId, reason: String): UserProfile? = transaction {
+        val userEntity = EntityID(UUID.fromString(userId.value), UsersTable)
+        val row = UsersTable.selectAll().where { UsersTable.id eq userEntity }.limit(1).firstOrNull()
+            ?: return@transaction null
+        val now = Clock.System.now()
+        val offsetNow = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+        UsersTable.update({ UsersTable.id eq userEntity }) {
+            it[UsersTable.status] = UserStatus.DELETED.dbValue()
+            it[UsersTable.updatedAt] = offsetNow
+        }
+        val actorEntity = EntityID(UUID.fromString(actorId.value), UsersTable)
+        insertAudit(
+            auditId = UUID.randomUUID(),
+            actorId = actorEntity,
+            targetId = userEntity,
+            action = UserAuditAction.USER_DELETED,
+            reason = reason
+        )
+        val roles = loadCurrentRoles(listOf(userEntity.value))[userEntity.value].orEmpty()
+        row.copy(
+            row = row,
+            status = UserStatus.DELETED,
             updatedAt = now,
             roles = roles
         )
@@ -356,6 +386,7 @@ private fun String.toUserAuditAction(): UserAuditAction = when (this) {
     "user.created" -> UserAuditAction.USER_CREATED
     "roles.replaced" -> UserAuditAction.ROLES_REPLACED
     "status.changed" -> UserAuditAction.STATUS_CHANGED
+    "user.deleted" -> UserAuditAction.USER_DELETED
     else -> error("Unknown audit action $this")
 }
 
@@ -370,15 +401,18 @@ private fun UserAuditAction.dbValue(): String = when (this) {
     UserAuditAction.USER_CREATED -> "user.created"
     UserAuditAction.ROLES_REPLACED -> "roles.replaced"
     UserAuditAction.STATUS_CHANGED -> "status.changed"
+    UserAuditAction.USER_DELETED -> "user.deleted"
 }
 
 private fun String.toUserStatus(): UserStatus = when (this) {
     "active" -> UserStatus.ACTIVE
     "disabled" -> UserStatus.DISABLED
+    "deleted" -> UserStatus.DELETED
     else -> error("Unknown status $this")
 }
 
 private fun UserStatus.dbValue(): String = when (this) {
     UserStatus.ACTIVE -> "active"
     UserStatus.DISABLED -> "disabled"
+    UserStatus.DELETED -> "deleted"
 }

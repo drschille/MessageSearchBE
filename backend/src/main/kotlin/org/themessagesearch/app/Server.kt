@@ -545,7 +545,8 @@ private fun Route.userRoutes(userRepo: UserRepository) {
         userRepo.findOrCreateFromAuth(auth.userId, auth.roles.toList(), email = null, displayName = null)
         val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 200) ?: 50
         val cursor = call.request.queryParameters["cursor"]
-        val result = runCatching { userRepo.listUsers(limit, cursor) }.getOrElse {
+        val includeDeleted = call.request.queryParameters["include_deleted"]?.toBooleanStrictOrNull() ?: false
+        val result = runCatching { userRepo.listUsers(limit, cursor, includeDeleted) }.getOrElse {
             return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid cursor"))
         }
         call.respond(UserListResponse(result.items.map { it.toResponse() }, result.nextCursor))
@@ -612,6 +613,23 @@ private fun Route.userRoutes(userRepo: UserRepository) {
         }
         val updated = userRepo.updateStatus(userId, req.status, auth.userId, req.reason)
             ?: return@patch call.respond(HttpStatusCode.NotFound)
+        call.respond(updated.toResponse())
+    }
+
+    delete("/v1/users/{id}") {
+        val auth = call.requireAuthContext() ?: return@delete
+        if (!call.requireAnyRole(auth, UserRole.ADMIN)) return@delete
+        userRepo.findOrCreateFromAuth(auth.userId, auth.roles.toList(), email = null, displayName = null)
+        val idParam = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+        val userId = runCatching { UserId(idParam) }.getOrElse {
+            return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid user id"))
+        }
+        val req = call.receive<UserDeleteRequest>()
+        if (req.reason.isBlank()) {
+            return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "reason is required"))
+        }
+        val updated = userRepo.deleteUser(userId, auth.userId, req.reason)
+            ?: return@delete call.respond(HttpStatusCode.NotFound)
         call.respond(updated.toResponse())
     }
 

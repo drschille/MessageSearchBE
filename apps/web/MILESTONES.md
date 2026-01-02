@@ -5,10 +5,10 @@ Milestone plan aligned with `apps/web/SPEC.md`. Each milestone targets a vertica
 Effort key: S = 1–3 days, M = 4–7 days, L = 1–2 weeks.
 
 ## W0 - Project Bootstrap (S)
-- [ ] Next.js + TypeScript scaffold (App Router).
-- [ ] Base layout, global styles, and design tokens.
-- [ ] API client wrapper + env config (API base URL).
-- [ ] Auth token handling (dev-only mock token ok).
+- [x] Next.js + TypeScript scaffold (App Router).
+- [x] Base layout, global styles, and design tokens.
+- [x] API client wrapper + env config (API base URL).
+- [x] Auth token handling (dev-only mock token ok).
 
 ## W1 - Search MVP (M)
 - [ ] Search page with query + filters.
@@ -37,6 +37,12 @@ Effort key: S = 1–3 days, M = 4–7 days, L = 1–2 weeks.
 - [ ] Create user flow (admin-only).
 - [ ] Role assignment editor with required reason.
 - [ ] Enable/disable user status with confirmation.
+
+## W4.2 - AI Assist (M)
+- [ ] Document Q&A panel with citations.
+- [ ] Grammar/semantics audit presets with result summaries.
+- [ ] Inline links from AI responses to paragraph anchors.
+- [ ] Prompt history view scoped to the document.
 
 ## W5 - Collaboration v0 (L)
 - [ ] WebSocket connection lifecycle (connect/reconnect).

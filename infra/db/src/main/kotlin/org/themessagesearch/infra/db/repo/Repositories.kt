@@ -63,6 +63,22 @@ class ExposedDocumentRepository : DocumentRepository {
             it[updatedAt] = offsetNow
             it[DocumentsTable.snapshotId] = null
         }
+        val auditAction = if (request.publish) "publish" else "draft.created"
+        val auditToState = if (request.publish) "published" else null
+        DocumentAuditsTable.insert {
+            it[id] = UUID.randomUUID()
+            it[documentId] = id.value
+            it[actorId] = UUID.fromString(actorId?.value ?: ZERO_UUID)
+            it[action] = auditAction
+            it[reason] = null
+            it[fromState] = null
+            it[toState] = auditToState
+            it[DocumentAuditsTable.snapshotId] = snapshotId?.let { sid -> UUID.fromString(sid.value) }
+            it[diffSummary] = null
+            it[requestId] = null
+            it[ipFingerprint] = null
+            it[createdAt] = offsetNow
+        }
         if (request.publish && snapshotId != null) {
             val createdBy = actorId?.value ?: ZERO_UUID
             SnapshotsTable.insert {
@@ -81,22 +97,6 @@ class ExposedDocumentRepository : DocumentRepository {
             DocumentsTable.update({ DocumentsTable.id eq id }) {
                 it[DocumentsTable.snapshotId] = UUID.fromString(snapshotId.value)
             }
-        }
-        val auditAction = if (request.publish) "publish" else "draft.created"
-        val auditToState = if (request.publish) "published" else null
-        DocumentAuditsTable.insert {
-            it[id] = UUID.randomUUID()
-            it[documentId] = id.value
-            it[actorId] = UUID.fromString(actorId?.value ?: ZERO_UUID)
-            it[action] = auditAction
-            it[reason] = null
-            it[fromState] = null
-            it[toState] = auditToState
-            it[DocumentAuditsTable.snapshotId] = snapshotId?.let { sid -> UUID.fromString(sid.value) }
-            it[diffSummary] = null
-            it[requestId] = null
-            it[ipFingerprint] = null
-            it[createdAt] = offsetNow
         }
         normalizedParagraphs.forEach { paragraph ->
             DocumentParagraphsTable.insert {

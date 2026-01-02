@@ -8,6 +8,8 @@ import org.themessagesearch.core.model.CollaborationSnapshot
 import org.themessagesearch.core.model.CollaborationUpdate
 import org.themessagesearch.core.model.DocumentCreateRequest
 import org.themessagesearch.core.model.DocumentParagraphInput
+import org.themessagesearch.core.model.DocumentAuditAction
+import org.themessagesearch.core.model.SnapshotState
 import org.themessagesearch.core.model.UserAuditAction
 import org.themessagesearch.core.model.UserCreateRequest
 import org.themessagesearch.core.model.UserId
@@ -16,6 +18,8 @@ import org.themessagesearch.core.model.UserStatus
 import org.themessagesearch.infra.db.repo.ExposedDocumentRepository
 import org.themessagesearch.infra.db.repo.ExposedEmbeddingRepository
 import org.themessagesearch.infra.db.repo.ExposedCollaborationRepository
+import org.themessagesearch.infra.db.repo.ExposedSnapshotRepository
+import org.themessagesearch.infra.db.repo.ExposedAuditRepository
 import org.themessagesearch.infra.db.repo.ExposedUserRepository
 import kotlinx.coroutines.runBlocking
 import kotlin.random.Random
@@ -27,7 +31,10 @@ class RepositoryIntegrationTest {
     private val docRepo = ExposedDocumentRepository()
     private val embRepo = ExposedEmbeddingRepository()
     private val collabRepo = ExposedCollaborationRepository()
+    private val snapshotRepo = ExposedSnapshotRepository()
+    private val auditRepo = ExposedAuditRepository()
     private val userRepo = ExposedUserRepository()
+    private val actorId = UserId(UUID.randomUUID().toString())
 
     @BeforeAll
     fun startContainer() {
@@ -57,7 +64,7 @@ class RepositoryIntegrationTest {
     fun `migration V1 created tables`() = runBlocking {
         assumeTrue(postgres != null)
         // Simple sanity: insert + select to prove tables exist
-        val doc = docRepo.create(sampleRequest("Migrate", "Check tables"))
+        val doc = docRepo.create(sampleRequest("Migrate", "Check tables"), actorId)
         val fetched = docRepo.findById(doc.id, snapshotId = null, languageCode = doc.languageCode)
         assertNotNull(fetched)
         assertEquals(doc.title, fetched!!.title)
@@ -66,7 +73,7 @@ class RepositoryIntegrationTest {
     @Test
     fun `document CRUD and missing embedding list`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(sampleRequest("Title A", "Body A"))
+        val doc = docRepo.create(sampleRequest("Title A", "Body A"), actorId)
         val missing = docRepo.listParagraphsMissingEmbedding(10)
         val firstParagraph = doc.paragraphs.first()
         assertTrue(missing.any { it.id.value == firstParagraph.id.value })
@@ -81,7 +88,7 @@ class RepositoryIntegrationTest {
     fun `batch upsert embeddings`() = runBlocking {
         assumeTrue(postgres != null)
         val paragraphs = (1..3).map { idx ->
-            docRepo.create(sampleRequest("Title $idx", "Body $idx")).paragraphs.first()
+            docRepo.create(sampleRequest("Title $idx", "Body $idx"), actorId).paragraphs.first()
         }
         val vectors = paragraphs.associate { it.id to randomVector() }
         embRepo.batchUpsertParagraphEmbeddings(vectors)
@@ -113,7 +120,7 @@ class RepositoryIntegrationTest {
     @Test
     fun `collaboration updates are idempotent`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(sampleRequest("Collab", "Paragraph body"))
+        val doc = docRepo.create(sampleRequest("Collab", "Paragraph body"), actorId)
         val paragraph = doc.paragraphs.first()
         val update = CollaborationUpdate(
             documentId = doc.id,
@@ -134,7 +141,7 @@ class RepositoryIntegrationTest {
     @Test
     fun `collaboration update pagination`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(sampleRequest("Collab Paginate", "First paragraph"))
+        val doc = docRepo.create(sampleRequest("Collab Paginate", "First paragraph"), actorId)
         val paragraph = doc.paragraphs.first()
         val clientId = UUID.randomUUID().toString()
         val update1 = CollaborationUpdate(
@@ -157,7 +164,7 @@ class RepositoryIntegrationTest {
     @Test
     fun `collaboration snapshot roundtrip`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(sampleRequest("Collab Snapshot", "Body"))
+        val doc = docRepo.create(sampleRequest("Collab Snapshot", "Body"), actorId)
         val snapshot = CollaborationSnapshot(
             documentId = doc.id,
             languageCode = doc.languageCode,
@@ -174,7 +181,7 @@ class RepositoryIntegrationTest {
     @Test
     fun `dimension mismatch throws`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(sampleRequest("Dim", "Mismatch"))
+        val doc = docRepo.create(sampleRequest("Dim", "Mismatch"), actorId)
         val paragraph = doc.paragraphs.first()
         val bad = FloatArray(10) { 0f }
         val ex = assertThrows<IllegalArgumentException> { runBlocking { embRepo.upsertParagraphEmbedding(paragraph.id, bad) } }
@@ -204,6 +211,25 @@ class RepositoryIntegrationTest {
         assertTrue(audits.items.any { it.action == UserAuditAction.USER_CREATED })
         assertTrue(audits.items.any { it.action == UserAuditAction.ROLES_REPLACED })
         assertTrue(audits.items.any { it.action == UserAuditAction.STATUS_CHANGED })
+    }
+
+    @Test
+    fun `snapshot and audit created on publish`() = runBlocking {
+        assumeTrue(postgres != null)
+        val doc = docRepo.create(sampleRequest("Snapshot doc", "Snapshot body"), actorId)
+        val snapshots = snapshotRepo.list(doc.id, limit = 10, cursor = null)
+        assertEquals(1, snapshots.items.size)
+        val snapshot = snapshots.items.first()
+        assertEquals(doc.id.value, snapshot.documentId.value)
+        assertEquals(1, snapshot.version)
+        assertEquals(SnapshotState.PUBLISHED, snapshot.state)
+        val fetched = snapshotRepo.findById(doc.id, snapshot.snapshotId)
+        assertNotNull(fetched)
+
+        val audits = auditRepo.list(doc.id, limit = 10, cursor = null)
+        assertTrue(audits.items.any { it.action == DocumentAuditAction.PUBLISH })
+        val audit = audits.items.first { it.action == DocumentAuditAction.PUBLISH }
+        assertEquals(snapshot.snapshotId.value, audit.snapshotId?.value)
     }
 
     private fun sampleRequest(title: String, body: String, languageCode: String = "en-US"): DocumentCreateRequest {

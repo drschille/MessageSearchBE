@@ -38,6 +38,8 @@ class HybridSearchServiceImpl(
                        p.document_id,
                        p.language_code,
                        d.title,
+                       d.snapshot_id,
+                       d.version,
                        ts_headline('simple', p.body, q.qts, 'MaxFragments=2, MinWords=5, MaxWords=32') AS snippet,
                        coalesce(th.text_score,0) AS text_score,
                        coalesce(vh.vec_score,0)  AS vec_score,
@@ -49,7 +51,7 @@ class HybridSearchServiceImpl(
                 WHERE (coalesce(th.text_score,0) > 0 OR coalesce(vh.vec_score,0) > 0)
                   AND (? IS NULL OR p.language_code = ?)
             )
-            SELECT paragraph_id, document_id, language_code, title, snippet, text_score, vec_score, final_score,
+            SELECT paragraph_id, document_id, language_code, title, snapshot_id, version, snippet, text_score, vec_score, final_score,
                    COUNT(*) OVER() AS total
             FROM scored
             ORDER BY final_score DESC
@@ -92,6 +94,8 @@ class HybridSearchServiceImpl(
         out += SearchResultItem(
             documentId = getObject("document_id").toString(),
             paragraphId = getObject("paragraph_id").toString(),
+            snapshotId = getObject("snapshot_id")?.toString(),
+            version = getLong("version"),
             languageCode = getString("language_code"),
             title = getString("title"),
             snippet = getString("snippet"),

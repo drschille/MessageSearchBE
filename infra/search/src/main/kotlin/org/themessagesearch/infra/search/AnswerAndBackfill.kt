@@ -15,6 +15,7 @@ class AnswerServiceImpl(
             Citation(
                 documentId = it.documentId,
                 snapshotId = it.snapshotId,
+                version = it.version,
                 paragraphId = it.paragraphId,
                 languageCode = it.languageCode,
                 score = it.finalScore,

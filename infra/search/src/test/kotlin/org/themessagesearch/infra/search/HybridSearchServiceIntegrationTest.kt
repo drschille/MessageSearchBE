@@ -15,6 +15,7 @@ import org.testcontainers.containers.PostgreSQLContainer
 import org.themessagesearch.core.model.DocumentCreateRequest
 import org.themessagesearch.core.model.DocumentParagraphInput
 import org.themessagesearch.core.model.HybridWeights
+import org.themessagesearch.core.model.UserId
 import org.themessagesearch.core.ports.EmbeddingClient
 import org.themessagesearch.infra.db.DatabaseFactory
 import org.themessagesearch.infra.db.repo.DocumentParagraphsTable
@@ -30,6 +31,7 @@ class HybridSearchServiceIntegrationTest {
     private val embRepo = ExposedEmbeddingRepository()
     private val embeddingClient = StubEmbeddingClient(1536)
     private lateinit var search: HybridSearchServiceImpl
+    private val actorId = UserId.random()
 
     @BeforeAll
     fun startContainer() {
@@ -67,7 +69,7 @@ class HybridSearchServiceIntegrationTest {
     @Test
     fun `text query returns matching document`() = runBlocking {
         assumeTrue(postgres != null)
-        docRepo.create(sampleRequest("Searchable doc", "The fox jumps over the lazy dog"))
+        docRepo.create(sampleRequest("Searchable doc", "The fox jumps over the lazy dog"), actorId)
         embeddingClient.vector = FloatArray(embeddingClient.dimension)
 
         val resp = search.search("fox", limit = 5, offset = 0, weights = HybridWeights.Default, languageCode = "en-US")
@@ -75,12 +77,14 @@ class HybridSearchServiceIntegrationTest {
         assertEquals(1, resp.total)
         val result = resp.results.single()
         assertTrue(result.textScore > 0.0, "Expected positive text score")
+        assertEquals(1, result.version)
+        assertTrue(result.snapshotId != null)
     }
 
     @Test
     fun `vector query surfaces embedding match`() = runBlocking {
         assumeTrue(postgres != null)
-        val doc = docRepo.create(sampleRequest("Vector doc", "content that does not matter for vector search"))
+        val doc = docRepo.create(sampleRequest("Vector doc", "content that does not matter for vector search"), actorId)
         val paragraph = doc.paragraphs.first()
         val vector = FloatArray(embeddingClient.dimension) { idx -> if (idx == 0) 1f else 0f }
         embRepo.upsertParagraphEmbedding(paragraph.id, vector)
@@ -98,6 +102,8 @@ class HybridSearchServiceIntegrationTest {
         val result = resp.results.single()
         assertEquals(doc.id.value, result.documentId)
         assertTrue(result.vectorScore > 0.99, "Expected strong vector similarity")
+        assertEquals(doc.version, result.version)
+        assertEquals(doc.snapshotId?.value, result.snapshotId)
     }
 
     private fun sampleRequest(title: String, body: String, languageCode: String = "en-US"): DocumentCreateRequest {

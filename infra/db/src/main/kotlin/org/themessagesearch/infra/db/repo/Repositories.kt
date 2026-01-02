@@ -23,6 +23,7 @@ object DocumentsTable : UUIDTable("documents") {
     val languageCode = text("language_code")
     val createdAt = timestampWithTimeZone("created_at")
     val updatedAt = timestampWithTimeZone("updated_at")
+    val snapshotId = uuid("snapshot_id").nullable()
     // tsvector column is generated in DB migration; not mapped here.
 }
 
@@ -43,7 +44,7 @@ object ParagraphEmbeddingsTable : Table("paragraph_embeddings") {
 }
 
 class ExposedDocumentRepository : DocumentRepository {
-    override suspend fun create(request: DocumentCreateRequest): Document = transaction {
+    override suspend fun create(request: DocumentCreateRequest, actorId: UserId?): Document = transaction {
         require(request.paragraphs.isNotEmpty()) { "Document requires at least one paragraph" }
         val normalizedParagraphs = request.paragraphs.sortedBy { it.position }
         require(normalizedParagraphs.all { it.languageCode == request.languageCode }) {
@@ -52,6 +53,7 @@ class ExposedDocumentRepository : DocumentRepository {
         val now = Clock.System.now()
         val offsetNow = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         val aggregateBody = normalizedParagraphs.joinToString("\n\n") { it.body }
+        val snapshotId = if (request.publish) SnapshotId.random() else null
         val id = DocumentsTable.insertAndGetId {
             it[title] = request.title
             it[body] = aggregateBody
@@ -59,6 +61,42 @@ class ExposedDocumentRepository : DocumentRepository {
             it[languageCode] = request.languageCode
             it[createdAt] = offsetNow
             it[updatedAt] = offsetNow
+            it[DocumentsTable.snapshotId] = null
+        }
+        if (request.publish && snapshotId != null) {
+            val createdBy = actorId?.value ?: ZERO_UUID
+            SnapshotsTable.insert {
+                it[SnapshotsTable.id] = UUID.fromString(snapshotId.value)
+                it[SnapshotsTable.documentId] = id.value
+                it[SnapshotsTable.version] = 1
+                it[SnapshotsTable.state] = "published"
+                it[SnapshotsTable.title] = request.title
+                it[SnapshotsTable.body] = aggregateBody
+                it[SnapshotsTable.languageCode] = request.languageCode
+                it[SnapshotsTable.createdAt] = offsetNow
+                it[SnapshotsTable.createdBy] = UUID.fromString(createdBy)
+                it[SnapshotsTable.sourceDraftId] = null
+                it[SnapshotsTable.sourceRevision] = null
+            }
+            DocumentsTable.update({ DocumentsTable.id eq id }) {
+                it[DocumentsTable.snapshotId] = UUID.fromString(snapshotId.value)
+            }
+        }
+        val auditAction = if (request.publish) "publish" else "draft.created"
+        val auditToState = if (request.publish) "published" else null
+        DocumentAuditsTable.insert {
+            it[id] = UUID.randomUUID()
+            it[documentId] = id.value
+            it[actorId] = UUID.fromString(actorId?.value ?: ZERO_UUID)
+            it[action] = auditAction
+            it[reason] = null
+            it[fromState] = null
+            it[toState] = auditToState
+            it[DocumentAuditsTable.snapshotId] = snapshotId?.let { sid -> UUID.fromString(sid.value) }
+            it[diffSummary] = null
+            it[requestId] = null
+            it[ipFingerprint] = null
+            it[createdAt] = offsetNow
         }
         normalizedParagraphs.forEach { paragraph ->
             DocumentParagraphsTable.insert {
@@ -76,7 +114,16 @@ class ExposedDocumentRepository : DocumentRepository {
     }
 
     override suspend fun findById(id: DocumentId, snapshotId: SnapshotId?, languageCode: String?): Document? = transaction {
-        // Snapshot support is forthcoming; ignore snapshotId for now.
+        if (snapshotId != null) {
+            val snapshotRow = SnapshotsTable.select {
+                (SnapshotsTable.documentId eq UUID.fromString(id.value)) and
+                    (SnapshotsTable.id eq EntityID(UUID.fromString(snapshotId.value), SnapshotsTable))
+            }.limit(1).firstOrNull() ?: return@transaction null
+            if (languageCode != null && snapshotRow[SnapshotsTable.languageCode] != languageCode) {
+                return@transaction null
+            }
+            return@transaction snapshotRow.toSnapshotDocument()
+        }
         loadDocument(UUID.fromString(id.value), languageCode)
     }
 
@@ -109,7 +156,7 @@ class ExposedDocumentRepository : DocumentRepository {
         base.orderBy(DocumentParagraphsTable.id to SortOrder.ASC)
             .limit(limit)
             .map { row ->
-                row.toParagraph()
+                row.toParagraphRow()
             }
     }
 
@@ -173,7 +220,7 @@ class ExposedDocumentRepository : DocumentRepository {
         return query
             .orderBy(DocumentParagraphsTable.position to SortOrder.ASC)
             .groupBy { it[DocumentParagraphsTable.documentId].value }
-            .mapValues { (_, rows) -> rows.map { it.toParagraph() } }
+            .mapValues { (_, rows) -> rows.map { it.toParagraphRow() } }
     }
 
     private fun ResultRow.toDocument(paragraphs: List<DocumentParagraph>): Document = Document(
@@ -183,22 +230,44 @@ class ExposedDocumentRepository : DocumentRepository {
         version = this[DocumentsTable.version],
         languageCode = this[DocumentsTable.languageCode],
         paragraphs = paragraphs,
-        snapshotId = null,
+        snapshotId = this[DocumentsTable.snapshotId]?.let { SnapshotId(it.toString()) },
         createdAt = this[DocumentsTable.createdAt].toInstant().toKotlinInstant(),
         updatedAt = this[DocumentsTable.updatedAt].toInstant().toKotlinInstant()
     )
 
-    private fun ResultRow.toParagraph(): DocumentParagraph = DocumentParagraph(
-        id = ParagraphId(this[DocumentParagraphsTable.id].value.toString()),
-        documentId = DocumentId(this[DocumentParagraphsTable.documentId].value.toString()),
-        position = this[DocumentParagraphsTable.position],
-        heading = this[DocumentParagraphsTable.heading],
-        body = this[DocumentParagraphsTable.body],
-        languageCode = this[DocumentParagraphsTable.languageCode],
-        createdAt = this[DocumentParagraphsTable.createdAt].toInstant().toKotlinInstant(),
-        updatedAt = this[DocumentParagraphsTable.updatedAt].toInstant().toKotlinInstant()
+}
+
+private const val ZERO_UUID = "00000000-0000-0000-0000-000000000000"
+
+private fun ResultRow.toSnapshotDocument(): Document {
+    val docId = UUID.fromString(this[SnapshotsTable.documentId].toString())
+    val paragraphs = DocumentParagraphsTable
+        .select { DocumentParagraphsTable.documentId eq EntityID(docId, DocumentsTable) }
+        .orderBy(DocumentParagraphsTable.position to SortOrder.ASC)
+        .map { it.toParagraphRow() }
+    return Document(
+        id = DocumentId(this[SnapshotsTable.documentId].toString()),
+        title = this[SnapshotsTable.title],
+        body = this[SnapshotsTable.body],
+        version = this[SnapshotsTable.version],
+        languageCode = this[SnapshotsTable.languageCode],
+        paragraphs = paragraphs,
+        snapshotId = SnapshotId(this[SnapshotsTable.id].value.toString()),
+        createdAt = this[SnapshotsTable.createdAt].toInstant().toKotlinInstant(),
+        updatedAt = this[SnapshotsTable.createdAt].toInstant().toKotlinInstant()
     )
 }
+
+private fun ResultRow.toParagraphRow(): DocumentParagraph = DocumentParagraph(
+    id = ParagraphId(this[DocumentParagraphsTable.id].value.toString()),
+    documentId = DocumentId(this[DocumentParagraphsTable.documentId].value.toString()),
+    position = this[DocumentParagraphsTable.position],
+    heading = this[DocumentParagraphsTable.heading],
+    body = this[DocumentParagraphsTable.body],
+    languageCode = this[DocumentParagraphsTable.languageCode],
+    createdAt = this[DocumentParagraphsTable.createdAt].toInstant().toKotlinInstant(),
+    updatedAt = this[DocumentParagraphsTable.updatedAt].toInstant().toKotlinInstant()
+)
 
 class ExposedEmbeddingRepository : EmbeddingRepository {
     private val dim = 1536

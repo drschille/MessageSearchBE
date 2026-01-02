@@ -141,6 +141,7 @@ data class SearchResultItem(
     val documentId: String,
     val paragraphId: String? = null,
     val snapshotId: String? = null,
+    val version: Long? = null,
     val languageCode: String? = null,
     val title: String,
     val snippet: String? = null,
@@ -164,6 +165,7 @@ data class AnswerRequest(val query: String, val limit: Int? = null, val language
 data class Citation(
     val documentId: String,
     val snapshotId: String? = null,
+    val version: Long? = null,
     val paragraphId: String? = null,
     val languageCode: String? = null,
     val score: Double,

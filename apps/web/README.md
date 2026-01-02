@@ -9,7 +9,13 @@ Developer guide for the web frontend. Product requirements live in `apps/web/SPE
 ## Getting Started (once implemented)
 - Install dependencies and run the web dev server from `apps/web`.
 - Start the backend with `./gradlew :backend:run` so the APIs are reachable.
-- Configure environment variables for API base URL and auth in the web app.
+- Copy `apps/web/.env.example` to `apps/web/.env.local` and adjust values.
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
 
 ## Project Notes
 - Product/UI requirements: `apps/web/SPEC.md`.

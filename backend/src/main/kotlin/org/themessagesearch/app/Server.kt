@@ -4,6 +4,7 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.cors.routing.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
@@ -27,6 +28,7 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.server.plugins.callloging.*
 import io.ktor.server.plugins.statuspages.*
+import java.net.URI
 import java.util.Base64
 import java.util.UUID
 
@@ -38,6 +40,27 @@ fun main() {
 
 fun Application.ktorModule(appConfig: AppConfig, services: ServiceRegistry.Registry) {
     install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; prettyPrint = false }) }
+    install(CORS) {
+        val allowedOrigins = appConfig.cors.allowedOrigins
+        allowedOrigins.forEach { origin ->
+            val uri = runCatching { URI(origin) }.getOrNull() ?: return@forEach
+            val host = uri.host ?: return@forEach
+            val schemes = if (uri.scheme.isNullOrBlank()) listOf("http", "https") else listOf(uri.scheme)
+            val hostValue = if (uri.port > 0) "${host}:${uri.port}" else host
+            allowHost(hostValue, schemes = schemes)
+        }
+        allowMethod(HttpMethod.Options)
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Put)
+        allowMethod(HttpMethod.Patch)
+        allowMethod(HttpMethod.Delete)
+        allowHeader(HttpHeaders.Authorization)
+        allowHeader(HttpHeaders.ContentType)
+        if (appConfig.cors.allowCredentials) {
+            allowCredentials = true
+        }
+    }
     install(CallLogging) {
         filter { call -> call.request.path() != "/health" && call.request.path() != "/metrics" }
     }

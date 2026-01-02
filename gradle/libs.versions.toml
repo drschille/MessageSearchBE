@@ -36,6 +36,7 @@ ktorClientCore = { module = "io.ktor:ktor-client-core-jvm", version.ref = "ktor"
 ktorClientApache = { module = "io.ktor:ktor-client-apache-jvm", version.ref = "ktor" }
 ktorServerMetricsMicrometer = { module = "io.ktor:ktor-server-metrics-micrometer", version.ref = "ktor" }
 ktorServerStatusPages = { module = "io.ktor:ktor-server-status-pages-jvm", version.ref = "ktor" }
+ktorServerCors = { module = "io.ktor:ktor-server-cors-jvm", version.ref = "ktor" }
 logbackClassic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 exposedCore = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposedDao = { module = "org.jetbrains.exposed:exposed-dao", version.ref = "exposed" }
@@ -68,7 +69,8 @@ ktorServer = [
   "ktorServerOpenapi",
   "ktorServerSwagger",
   "ktorServerMetricsMicrometer",
-  "ktorServerStatusPages"
+  "ktorServerStatusPages",
+  "ktorServerCors"
 ]
 exposedAll = ["exposedCore", "exposedDao", "exposedJdbc", "exposedKotlinDatetime"]
 

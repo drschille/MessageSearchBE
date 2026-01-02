@@ -12,11 +12,11 @@ Effort key: S = 0.5–2 days, M = 3–5 days, L = 6–10 days, XL = 2+ weeks.
 - [x] Metrics/log redaction for prompts and sensitive fields (S–M)
 
 ## M1 - Snapshot Backbone
-- [ ] Snapshot schema + repository (L)
-- [ ] Audit events schema + repository (L)
-- [ ] Snapshot list/fetch endpoints (M)
-- [ ] Document audit list/fetch endpoints (M)
-- [ ] Search and answer cite `snapshot_id` and version (M)
+- [x] Snapshot schema + repository (L)
+- [x] Audit events schema + repository (L)
+- [x] Snapshot list/fetch endpoints (M)
+- [x] Document audit list/fetch endpoints (M)
+- [x] Search and answer cite `snapshot_id` and version (M)
 
 ## M2 - Editorial Workflow
 - [ ] Workflow state model + persistence (L)

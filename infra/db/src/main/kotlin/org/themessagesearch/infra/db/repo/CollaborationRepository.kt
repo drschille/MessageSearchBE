@@ -8,6 +8,7 @@ import org.jetbrains.exposed.dao.id.LongIdTable
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
 import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.themessagesearch.core.model.CollaborationSnapshot
 import org.themessagesearch.core.model.CollaborationUpdate
@@ -70,11 +71,11 @@ class ExposedCollaborationRepository : CollaborationRepository {
         val insertedId = insert.resultedValues?.singleOrNull()?.get(CollabUpdatesTable.id)?.value
         val existingId = insertedId ?: CollabUpdatesTable
             .slice(CollabUpdatesTable.id)
-            .select {
+            .selectAll().where {
                 (CollabUpdatesTable.documentId eq UUID.fromString(update.documentId.value)) and
-                    (CollabUpdatesTable.paragraphId eq UUID.fromString(update.paragraphId.value)) and
-                    (CollabUpdatesTable.clientId eq UUID.fromString(update.clientId)) and
-                    (CollabUpdatesTable.seq eq update.seq)
+                        (CollabUpdatesTable.paragraphId eq UUID.fromString(update.paragraphId.value)) and
+                        (CollabUpdatesTable.clientId eq UUID.fromString(update.clientId)) and
+                        (CollabUpdatesTable.seq eq update.seq)
             }
             .limit(1)
             .firstOrNull()
@@ -91,9 +92,9 @@ class ExposedCollaborationRepository : CollaborationRepository {
         afterId: Long?,
         limit: Int
     ): List<CollaborationUpdate> = transaction {
-        val base = CollabUpdatesTable.select {
+        val base = CollabUpdatesTable.selectAll().where {
             (CollabUpdatesTable.documentId eq UUID.fromString(documentId.value)) and
-                (CollabUpdatesTable.languageCode eq languageCode)
+                    (CollabUpdatesTable.languageCode eq languageCode)
         }
         paragraphId?.let {
             base.andWhere { CollabUpdatesTable.paragraphId eq UUID.fromString(it.value) }
@@ -108,9 +109,9 @@ class ExposedCollaborationRepository : CollaborationRepository {
 
     override suspend fun getSnapshot(documentId: DocumentId, languageCode: String): CollaborationSnapshot? = transaction {
         CollabSnapshotsTable
-            .select {
+            .selectAll().where {
                 (CollabSnapshotsTable.documentId eq UUID.fromString(documentId.value)) and
-                    (CollabSnapshotsTable.languageCode eq languageCode)
+                        (CollabSnapshotsTable.languageCode eq languageCode)
             }
             .limit(1)
             .firstOrNull()
@@ -121,9 +122,9 @@ class ExposedCollaborationRepository : CollaborationRepository {
         val now = snapshot.createdAt ?: Clock.System.now()
         val offsetNow = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         val existing = CollabSnapshotsTable
-            .select {
+            .selectAll().where {
                 (CollabSnapshotsTable.documentId eq UUID.fromString(snapshot.documentId.value)) and
-                    (CollabSnapshotsTable.languageCode eq snapshot.languageCode)
+                        (CollabSnapshotsTable.languageCode eq snapshot.languageCode)
             }
             .limit(1)
             .firstOrNull()

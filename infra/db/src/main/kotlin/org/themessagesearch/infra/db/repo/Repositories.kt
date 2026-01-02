@@ -6,8 +6,8 @@ import kotlinx.datetime.toKotlinInstant
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
 import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.themessagesearch.core.model.*
 import org.themessagesearch.core.ports.DocumentRepository
@@ -69,18 +69,18 @@ class ExposedDocumentRepository : DocumentRepository {
         val auditAction = if (request.publish) "publish" else "draft.created"
         val auditToState = if (request.publish) DocumentWorkflowState.PUBLISHED.dbValue() else DocumentWorkflowState.DRAFT.dbValue()
         DocumentAuditsTable.insert {
-            it[id] = UUID.randomUUID()
-            it[documentId] = id.value
-            it[actorId] = UUID.fromString(actorId?.value ?: ZERO_UUID)
-            it[action] = auditAction
-            it[reason] = null
-            it[fromState] = null
-            it[toState] = auditToState
+            it[DocumentAuditsTable.id] = UUID.randomUUID()
+            it[DocumentAuditsTable.documentId] = id.value
+            it[DocumentAuditsTable.actorId] = UUID.fromString(actorId?.value ?: ZERO_UUID)
+            it[DocumentAuditsTable.action] = auditAction
+            it[DocumentAuditsTable.reason] = null
+            it[DocumentAuditsTable.fromState] = null
+            it[DocumentAuditsTable.toState] = auditToState
             it[DocumentAuditsTable.snapshotId] = snapshotId?.let { sid -> UUID.fromString(sid.value) }
-            it[diffSummary] = null
-            it[requestId] = null
-            it[ipFingerprint] = null
-            it[createdAt] = offsetNow
+            it[DocumentAuditsTable.diffSummary] = null
+            it[DocumentAuditsTable.requestId] = null
+            it[DocumentAuditsTable.ipFingerprint] = null
+            it[DocumentAuditsTable.createdAt] = offsetNow
         }
         if (request.publish && snapshotId != null) {
             val createdBy = actorId?.value ?: ZERO_UUID
@@ -103,13 +103,13 @@ class ExposedDocumentRepository : DocumentRepository {
         }
         normalizedParagraphs.forEach { paragraph ->
             DocumentParagraphsTable.insert {
-                it[documentId] = id
-                it[languageCode] = paragraph.languageCode
-                it[position] = paragraph.position
-                it[heading] = paragraph.heading
-                it[body] = paragraph.body
-                it[createdAt] = offsetNow
-                it[updatedAt] = offsetNow
+                it[DocumentParagraphsTable.documentId] = id
+                it[DocumentParagraphsTable.languageCode] = paragraph.languageCode
+                it[DocumentParagraphsTable.position] = paragraph.position
+                it[DocumentParagraphsTable.heading] = paragraph.heading
+                it[DocumentParagraphsTable.body] = paragraph.body
+                it[DocumentParagraphsTable.createdAt] = offsetNow
+                it[DocumentParagraphsTable.updatedAt] = offsetNow
             }
         }
         loadDocument(id.value, request.languageCode)
@@ -118,9 +118,9 @@ class ExposedDocumentRepository : DocumentRepository {
 
     override suspend fun findById(id: DocumentId, snapshotId: SnapshotId?, languageCode: String?): Document? = transaction {
         if (snapshotId != null) {
-            val snapshotRow = SnapshotsTable.select {
+            val snapshotRow = SnapshotsTable.selectAll().where {
                 (SnapshotsTable.documentId eq UUID.fromString(id.value)) and
-                    (SnapshotsTable.id eq EntityID(UUID.fromString(snapshotId.value), SnapshotsTable))
+                        (SnapshotsTable.id eq EntityID(UUID.fromString(snapshotId.value), SnapshotsTable))
             }.limit(1).firstOrNull() ?: return@transaction null
             if (languageCode != null && snapshotRow[SnapshotsTable.languageCode] != languageCode) {
                 return@transaction null
@@ -133,7 +133,7 @@ class ExposedDocumentRepository : DocumentRepository {
     override suspend fun fetchByIds(ids: Collection<DocumentId>, languageCode: String?): Map<DocumentId, Document> = transaction {
         if (ids.isEmpty()) return@transaction emptyMap()
         val uuidList = ids.map { UUID.fromString(it.value) }
-        val rows = DocumentsTable.select { DocumentsTable.id inList uuidList }.toList()
+        val rows = DocumentsTable.selectAll().where { DocumentsTable.id inList uuidList }.toList()
         val paragraphsByDoc = loadParagraphs(uuidList, languageCode)
         rows.mapNotNull { row ->
             val docLanguage = row[DocumentsTable.languageCode]
@@ -147,7 +147,7 @@ class ExposedDocumentRepository : DocumentRepository {
 
     override suspend fun listParagraphsMissingEmbedding(limit: Int, cursor: ParagraphId?, languageCode: String?): List<DocumentParagraph> = transaction {
         val base = (DocumentParagraphsTable leftJoin ParagraphEmbeddingsTable)
-            .select { ParagraphEmbeddingsTable.paragraphId.isNull() }
+            .selectAll().where { ParagraphEmbeddingsTable.paragraphId.isNull() }
         languageCode?.let { lang ->
             base.andWhere { DocumentParagraphsTable.languageCode eq lang }
         }
@@ -209,7 +209,7 @@ class ExposedDocumentRepository : DocumentRepository {
 
     private fun Transaction.loadDocument(id: UUID, languageCode: String?): Document? {
         val row = DocumentsTable
-            .select { DocumentsTable.id eq EntityID(id, DocumentsTable) }
+            .selectAll().where { DocumentsTable.id eq EntityID(id, DocumentsTable) }
             .limit(1)
             .firstOrNull()
             ?: return null
@@ -224,7 +224,8 @@ class ExposedDocumentRepository : DocumentRepository {
     ): Map<UUID, List<DocumentParagraph>> {
         if (documentIds.isEmpty()) return emptyMap()
         val query = DocumentParagraphsTable
-            .select { DocumentParagraphsTable.documentId inList documentIds.map { EntityID(it, DocumentsTable) } }
+            .selectAll()
+            .where { DocumentParagraphsTable.documentId inList documentIds.map { EntityID(it, DocumentsTable) } }
         languageCode?.let { lang ->
             query.andWhere { DocumentParagraphsTable.languageCode eq lang }
         }
@@ -254,7 +255,7 @@ private const val ZERO_UUID = "00000000-0000-0000-0000-000000000000"
 private fun ResultRow.toSnapshotDocument(): Document {
     val docId = UUID.fromString(this[SnapshotsTable.documentId].toString())
     val paragraphs = DocumentParagraphsTable
-        .select { DocumentParagraphsTable.documentId eq EntityID(docId, DocumentsTable) }
+        .selectAll().where { DocumentParagraphsTable.documentId eq EntityID(docId, DocumentsTable) }
         .orderBy(DocumentParagraphsTable.position to SortOrder.ASC)
         .map { it.toParagraphRow() }
     val snapshotState = this[SnapshotsTable.state]
@@ -326,7 +327,8 @@ class ExposedEmbeddingRepository : EmbeddingRepository {
     }
 
     override suspend fun hasParagraphEmbedding(paragraphId: ParagraphId): Boolean = transaction {
-        !ParagraphEmbeddingsTable.select { ParagraphEmbeddingsTable.paragraphId eq UUID.fromString(paragraphId.value) }.empty()
+        !ParagraphEmbeddingsTable.selectAll()
+            .where { ParagraphEmbeddingsTable.paragraphId eq UUID.fromString(paragraphId.value) }.empty()
     }
 
     private fun singleUpsertSql(paragraphId: ParagraphId, vector: FloatArray): String {

@@ -11,6 +11,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.themessagesearch.core.model.*
 import org.themessagesearch.core.ports.UserRepository
@@ -42,7 +43,7 @@ private object UserAuditsTable : UUIDTable("user_audits", "audit_id") {
 
 class ExposedUserRepository : UserRepository {
     override suspend fun findById(id: UserId): UserProfile? = transaction {
-        val row = UsersTable.select { UsersTable.id eq EntityID(UUID.fromString(id.value), UsersTable) }
+        val row = UsersTable.selectAll().where { UsersTable.id eq EntityID(UUID.fromString(id.value), UsersTable) }
             .limit(1)
             .firstOrNull()
             ?: return@transaction null
@@ -56,7 +57,7 @@ class ExposedUserRepository : UserRepository {
         email: String?,
         displayName: String?
     ): UserProfile = transaction {
-        val existing = UsersTable.select { UsersTable.id eq EntityID(UUID.fromString(id.value), UsersTable) }
+        val existing = UsersTable.selectAll().where { UsersTable.id eq EntityID(UUID.fromString(id.value), UsersTable) }
             .limit(1)
             .firstOrNull()
         if (existing != null) {
@@ -127,7 +128,7 @@ class ExposedUserRepository : UserRepository {
 
     override suspend fun createUser(request: UserCreateRequest, actorId: UserId): UserProfile? = transaction {
         if (request.email != null) {
-            val existing = UsersTable.select { UsersTable.email eq request.email }
+            val existing = UsersTable.selectAll().where { UsersTable.email eq request.email }
                 .limit(1)
                 .firstOrNull()
             if (existing != null) return@transaction null
@@ -170,7 +171,7 @@ class ExposedUserRepository : UserRepository {
         reason: String
     ): UserProfile? = transaction {
         val userEntity = EntityID(UUID.fromString(userId.value), UsersTable)
-        val row = UsersTable.select { UsersTable.id eq userEntity }.limit(1).firstOrNull()
+        val row = UsersTable.selectAll().where { UsersTable.id eq userEntity }.limit(1).firstOrNull()
             ?: return@transaction null
         val now = Clock.System.now()
         val offsetNow = now.toJavaInstant().atOffset(ZoneOffset.UTC)
@@ -194,7 +195,7 @@ class ExposedUserRepository : UserRepository {
         reason: String
     ): UserProfile? = transaction {
         val userEntity = EntityID(UUID.fromString(userId.value), UsersTable)
-        val row = UsersTable.select { UsersTable.id eq userEntity }.limit(1).firstOrNull()
+        val row = UsersTable.selectAll().where { UsersTable.id eq userEntity }.limit(1).firstOrNull()
             ?: return@transaction null
         val now = Clock.System.now()
         val offsetNow = now.toJavaInstant().atOffset(ZoneOffset.UTC)
@@ -222,7 +223,7 @@ class ExposedUserRepository : UserRepository {
     override suspend fun listAudits(userId: UserId, limit: Int, cursor: String?): UserAuditListResult = transaction {
         val parsedCursor = cursor?.let { parseCursor(it) }
         val targetEntity = EntityID(UUID.fromString(userId.value), UsersTable)
-        val base = UserAuditsTable.select { UserAuditsTable.targetUserId eq targetEntity }
+        val base = UserAuditsTable.selectAll().where { UserAuditsTable.targetUserId eq targetEntity }
         if (parsedCursor != null) {
             val cursorEntity = EntityID(parsedCursor.userId, UserAuditsTable)
             base.andWhere {
@@ -282,7 +283,7 @@ class ExposedUserRepository : UserRepository {
     private fun loadCurrentRoles(userIds: List<UUID>): Map<UUID, List<UserRole>> {
         if (userIds.isEmpty()) return emptyMap()
         val rows = UserRolesTable
-            .select { UserRolesTable.userId inList userIds.map { EntityID(it, UsersTable) } }
+            .selectAll().where { UserRolesTable.userId inList userIds.map { EntityID(it, UsersTable) } }
             .orderBy(UserRolesTable.userId to SortOrder.ASC, UserRolesTable.assignedAt to SortOrder.DESC)
         val rolesByUser = mutableMapOf<UUID, MutableList<UserRole>>()
         val latestByUser = mutableMapOf<UUID, java.time.OffsetDateTime>()

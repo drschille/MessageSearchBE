@@ -2,7 +2,6 @@ package org.themessagesearch.infra.db.repo
 
 import kotlinx.datetime.Clock
 import kotlinx.datetime.toJavaInstant
-import kotlinx.datetime.toKotlinInstant
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -11,6 +10,7 @@ import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.themessagesearch.core.model.*
 import org.themessagesearch.core.ports.WorkflowRepository
@@ -38,7 +38,8 @@ class ExposedWorkflowRepository : WorkflowRepository {
     private val json = Json { encodeDefaults = true }
 
     override suspend fun getDocument(documentId: DocumentId): WorkflowDocument? = transaction {
-        val row = DocumentsTable.select { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
+        val row = DocumentsTable.selectAll()
+            .where { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
             .limit(1)
             .firstOrNull()
             ?: return@transaction null
@@ -74,28 +75,28 @@ class ExposedWorkflowRepository : WorkflowRepository {
         val reviewId = ReviewId.random()
         val encodedReviewers = json.encodeToString(ListSerializer(String.serializer()), reviewers.map { it.value })
         DocumentReviewsTable.insert {
-            it[id] = UUID.fromString(reviewId.value)
+            it[DocumentReviewsTable.id] = UUID.fromString(reviewId.value)
             it[DocumentReviewsTable.documentId] = UUID.fromString(documentId.value)
-            it[status] = ReviewStatus.IN_REVIEW.dbValue()
+            it[DocumentReviewsTable.status] = ReviewStatus.IN_REVIEW.dbValue()
             it[DocumentReviewsTable.summary] = summary
             it[DocumentReviewsTable.reviewers] = encodedReviewers
-            it[createdBy] = UUID.fromString(actorId.value)
-            it[createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
-            it[updatedAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+            it[DocumentReviewsTable.createdBy] = UUID.fromString(actorId.value)
+            it[DocumentReviewsTable.createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+            it[DocumentReviewsTable.updatedAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         }
         val auditId = AuditId.random()
         DocumentAuditsTable.insert {
-            it[id] = UUID.fromString(auditId.value)
+            it[DocumentAuditsTable.id] = UUID.fromString(auditId.value)
             it[DocumentAuditsTable.documentId] = UUID.fromString(documentId.value)
-            it[actorId] = UUID.fromString(actorId.value)
-            it[action] = DocumentAuditAction.REVIEW_SUBMITTED.dbValue()
-            it[reason] = summary
-            it[fromState] = DocumentWorkflowState.DRAFT.dbValue()
-            it[toState] = DocumentWorkflowState.IN_REVIEW.dbValue()
+            it[DocumentAuditsTable.actorId] = UUID.fromString(actorId.value)
+            it[DocumentAuditsTable.action] = DocumentAuditAction.REVIEW_SUBMITTED.dbValue()
+            it[DocumentAuditsTable.reason] = summary
+            it[DocumentAuditsTable.fromState] = DocumentWorkflowState.DRAFT.dbValue()
+            it[DocumentAuditsTable.toState] = DocumentWorkflowState.IN_REVIEW.dbValue()
             it[DocumentAuditsTable.snapshotId] = null
-            it[diffSummary] = null
-            it[requestId] = null
-            it[ipFingerprint] = null
+            it[DocumentAuditsTable.diffSummary] = null
+            it[DocumentAuditsTable.requestId] = null
+            it[DocumentAuditsTable.ipFingerprint] = null
             it[DocumentAuditsTable.createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         }
         ReviewRequest(
@@ -119,9 +120,9 @@ class ExposedWorkflowRepository : WorkflowRepository {
         actorId: UserId
     ): WorkflowTransitionResult? = transaction {
         val now = Clock.System.now()
-        val reviewRow = DocumentReviewsTable.select {
+        val reviewRow = DocumentReviewsTable.selectAll().where {
             (DocumentReviewsTable.id eq EntityID(UUID.fromString(reviewId.value), DocumentReviewsTable)) and
-                (DocumentReviewsTable.documentId eq UUID.fromString(documentId.value))
+                    (DocumentReviewsTable.documentId eq UUID.fromString(documentId.value))
         }.limit(1).firstOrNull() ?: return@transaction null
         if (reviewRow[DocumentReviewsTable.status] != ReviewStatus.IN_REVIEW.dbValue()) return@transaction null
         val priorState = DocumentWorkflowState.IN_REVIEW
@@ -138,41 +139,42 @@ class ExposedWorkflowRepository : WorkflowRepository {
         DocumentReviewsTable.update({
             DocumentReviewsTable.id eq EntityID(UUID.fromString(reviewId.value), DocumentReviewsTable)
         }) {
-            it[status] = ReviewStatus.APPROVED.dbValue()
-            it[updatedAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+            it[DocumentReviewsTable.status] = ReviewStatus.APPROVED.dbValue()
+            it[DocumentReviewsTable.updatedAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         }
         val snapshotId = SnapshotId.random()
-        val docRow = DocumentsTable.select { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
+        val docRow = DocumentsTable.selectAll()
+            .where { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
             .limit(1).first()
         SnapshotsTable.insert {
-            it[id] = UUID.fromString(snapshotId.value)
-            it[documentId] = UUID.fromString(documentId.value)
-            it[version] = expectedVersion + 1
-            it[state] = SnapshotState.PUBLISHED.dbValue()
-            it[title] = docRow[DocumentsTable.title]
-            it[body] = docRow[DocumentsTable.body]
-            it[languageCode] = docRow[DocumentsTable.languageCode]
-            it[createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
-            it[createdBy] = UUID.fromString(actorId.value)
-            it[sourceDraftId] = null
-            it[sourceRevision] = null
+            it[SnapshotsTable.id] = UUID.fromString(snapshotId.value)
+            it[SnapshotsTable.documentId] = UUID.fromString(documentId.value)
+            it[SnapshotsTable.version] = expectedVersion + 1
+            it[SnapshotsTable.state] = SnapshotState.PUBLISHED.dbValue()
+            it[SnapshotsTable.title] = docRow[DocumentsTable.title]
+            it[SnapshotsTable.body] = docRow[DocumentsTable.body]
+            it[SnapshotsTable.languageCode] = docRow[DocumentsTable.languageCode]
+            it[SnapshotsTable.createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+            it[SnapshotsTable.createdBy] = UUID.fromString(actorId.value)
+            it[SnapshotsTable.sourceDraftId] = null
+            it[SnapshotsTable.sourceRevision] = null
         }
         DocumentsTable.update({ DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }) {
-            it[snapshotId] = UUID.fromString(snapshotId.value)
+            it[DocumentsTable.snapshotId] = UUID.fromString(snapshotId.value)
         }
         val auditId = AuditId.random()
         DocumentAuditsTable.insert {
-            it[id] = UUID.fromString(auditId.value)
+            it[DocumentAuditsTable.id] = UUID.fromString(auditId.value)
             it[DocumentAuditsTable.documentId] = UUID.fromString(documentId.value)
-            it[actorId] = UUID.fromString(actorId.value)
-            it[action] = DocumentAuditAction.REVIEW_APPROVED.dbValue()
+            it[DocumentAuditsTable.actorId] = UUID.fromString(actorId.value)
+            it[DocumentAuditsTable.action] = DocumentAuditAction.REVIEW_APPROVED.dbValue()
             it[DocumentAuditsTable.reason] = reason
-            it[fromState] = priorState.dbValue()
-            it[toState] = DocumentWorkflowState.PUBLISHED.dbValue()
+            it[DocumentAuditsTable.fromState] = priorState.dbValue()
+            it[DocumentAuditsTable.toState] = DocumentWorkflowState.PUBLISHED.dbValue()
             it[DocumentAuditsTable.snapshotId] = UUID.fromString(snapshotId.value)
             it[DocumentAuditsTable.diffSummary] = diffSummary
-            it[requestId] = null
-            it[ipFingerprint] = null
+            it[DocumentAuditsTable.requestId] = null
+            it[DocumentAuditsTable.ipFingerprint] = null
             it[DocumentAuditsTable.createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         }
         WorkflowTransitionResult(
@@ -193,9 +195,9 @@ class ExposedWorkflowRepository : WorkflowRepository {
         actorId: UserId
     ): WorkflowTransitionResult? = transaction {
         val now = Clock.System.now()
-        val reviewRow = DocumentReviewsTable.select {
+        val reviewRow = DocumentReviewsTable.selectAll().where {
             (DocumentReviewsTable.id eq EntityID(UUID.fromString(reviewId.value), DocumentReviewsTable)) and
-                (DocumentReviewsTable.documentId eq UUID.fromString(documentId.value))
+                    (DocumentReviewsTable.documentId eq UUID.fromString(documentId.value))
         }.limit(1).firstOrNull() ?: return@transaction null
         if (reviewRow[DocumentReviewsTable.status] != ReviewStatus.IN_REVIEW.dbValue()) return@transaction null
         val priorState = DocumentWorkflowState.IN_REVIEW
@@ -212,22 +214,22 @@ class ExposedWorkflowRepository : WorkflowRepository {
         DocumentReviewsTable.update({
             DocumentReviewsTable.id eq EntityID(UUID.fromString(reviewId.value), DocumentReviewsTable)
         }) {
-            it[status] = ReviewStatus.CHANGES_REQUESTED.dbValue()
-            it[updatedAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+            it[DocumentReviewsTable.status] = ReviewStatus.CHANGES_REQUESTED.dbValue()
+            it[DocumentReviewsTable.updatedAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         }
         val auditId = AuditId.random()
         DocumentAuditsTable.insert {
-            it[id] = UUID.fromString(auditId.value)
+            it[DocumentAuditsTable.id] = UUID.fromString(auditId.value)
             it[DocumentAuditsTable.documentId] = UUID.fromString(documentId.value)
-            it[actorId] = UUID.fromString(actorId.value)
-            it[action] = DocumentAuditAction.REVIEW_REJECTED.dbValue()
+            it[DocumentAuditsTable.actorId] = UUID.fromString(actorId.value)
+            it[DocumentAuditsTable.action] = DocumentAuditAction.REVIEW_REJECTED.dbValue()
             it[DocumentAuditsTable.reason] = reason
-            it[fromState] = priorState.dbValue()
-            it[toState] = DocumentWorkflowState.DRAFT.dbValue()
+            it[DocumentAuditsTable.fromState] = priorState.dbValue()
+            it[DocumentAuditsTable.toState] = DocumentWorkflowState.DRAFT.dbValue()
             it[DocumentAuditsTable.snapshotId] = null
             it[DocumentAuditsTable.diffSummary] = diffSummary
-            it[requestId] = null
-            it[ipFingerprint] = null
+            it[DocumentAuditsTable.requestId] = null
+            it[DocumentAuditsTable.ipFingerprint] = null
             it[DocumentAuditsTable.createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         }
         WorkflowTransitionResult(
@@ -248,15 +250,14 @@ class ExposedWorkflowRepository : WorkflowRepository {
         actorId: UserId
     ): WorkflowTransitionResult? = transaction {
         val now = Clock.System.now()
-        val priorRow = DocumentsTable.select { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
+        val priorRow = DocumentsTable.selectAll()
+            .where { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
             .limit(1)
             .firstOrNull() ?: return@transaction null
         val priorState = priorRow[DocumentsTable.workflowState].toWorkflowState()
         val expectedState = if (force) {
-            DocumentsTable.workflowState inList listOf(
-                DocumentWorkflowState.DRAFT.dbValue(),
-                DocumentWorkflowState.IN_REVIEW.dbValue()
-            )
+            (DocumentsTable.workflowState eq DocumentWorkflowState.DRAFT.dbValue()) or
+                (DocumentsTable.workflowState eq DocumentWorkflowState.IN_REVIEW.dbValue())
         } else {
             DocumentsTable.workflowState eq DocumentWorkflowState.IN_REVIEW.dbValue()
         }
@@ -271,37 +272,38 @@ class ExposedWorkflowRepository : WorkflowRepository {
         }
         if (updated == 0) return@transaction null
         val snapshotId = SnapshotId.random()
-        val docRow = DocumentsTable.select { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
+        val docRow = DocumentsTable.selectAll()
+            .where { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
             .limit(1).first()
         SnapshotsTable.insert {
-            it[id] = UUID.fromString(snapshotId.value)
-            it[documentId] = UUID.fromString(documentId.value)
-            it[version] = expectedVersion + 1
-            it[state] = SnapshotState.PUBLISHED.dbValue()
-            it[title] = docRow[DocumentsTable.title]
-            it[body] = docRow[DocumentsTable.body]
-            it[languageCode] = docRow[DocumentsTable.languageCode]
-            it[createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
-            it[createdBy] = UUID.fromString(actorId.value)
-            it[sourceDraftId] = null
-            it[sourceRevision] = null
+            it[SnapshotsTable.id] = UUID.fromString(snapshotId.value)
+            it[SnapshotsTable.documentId] = UUID.fromString(documentId.value)
+            it[SnapshotsTable.version] = expectedVersion + 1
+            it[SnapshotsTable.state] = SnapshotState.PUBLISHED.dbValue()
+            it[SnapshotsTable.title] = docRow[DocumentsTable.title]
+            it[SnapshotsTable.body] = docRow[DocumentsTable.body]
+            it[SnapshotsTable.languageCode] = docRow[DocumentsTable.languageCode]
+            it[SnapshotsTable.createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+            it[SnapshotsTable.createdBy] = UUID.fromString(actorId.value)
+            it[SnapshotsTable.sourceDraftId] = null
+            it[SnapshotsTable.sourceRevision] = null
         }
         DocumentsTable.update({ DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }) {
-            it[snapshotId] = UUID.fromString(snapshotId.value)
+            it[DocumentsTable.snapshotId] = UUID.fromString(snapshotId.value)
         }
         val auditId = AuditId.random()
         DocumentAuditsTable.insert {
-            it[id] = UUID.fromString(auditId.value)
+            it[DocumentAuditsTable.id] = UUID.fromString(auditId.value)
             it[DocumentAuditsTable.documentId] = UUID.fromString(documentId.value)
-            it[actorId] = UUID.fromString(actorId.value)
-            it[action] = if (force) DocumentAuditAction.FORCE_PUBLISH.dbValue() else DocumentAuditAction.PUBLISH.dbValue()
+            it[DocumentAuditsTable.actorId] = UUID.fromString(actorId.value)
+            it[DocumentAuditsTable.action] = if (force) DocumentAuditAction.FORCE_PUBLISH.dbValue() else DocumentAuditAction.PUBLISH.dbValue()
             it[DocumentAuditsTable.reason] = reason
-            it[fromState] = priorState.dbValue()
-            it[toState] = DocumentWorkflowState.PUBLISHED.dbValue()
+            it[DocumentAuditsTable.fromState] = priorState.dbValue()
+            it[DocumentAuditsTable.toState] = DocumentWorkflowState.PUBLISHED.dbValue()
             it[DocumentAuditsTable.snapshotId] = UUID.fromString(snapshotId.value)
             it[DocumentAuditsTable.diffSummary] = diffSummary
-            it[requestId] = null
-            it[ipFingerprint] = null
+            it[DocumentAuditsTable.requestId] = null
+            it[DocumentAuditsTable.ipFingerprint] = null
             it[DocumentAuditsTable.createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         }
         WorkflowTransitionResult(
@@ -331,37 +333,38 @@ class ExposedWorkflowRepository : WorkflowRepository {
         }
         if (updated == 0) return@transaction null
         val snapshotId = SnapshotId.random()
-        val docRow = DocumentsTable.select { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
+        val docRow = DocumentsTable.selectAll()
+            .where { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
             .limit(1).first()
         SnapshotsTable.insert {
-            it[id] = UUID.fromString(snapshotId.value)
-            it[documentId] = UUID.fromString(documentId.value)
-            it[version] = expectedVersion + 1
-            it[state] = SnapshotState.ARCHIVED.dbValue()
-            it[title] = docRow[DocumentsTable.title]
-            it[body] = docRow[DocumentsTable.body]
-            it[languageCode] = docRow[DocumentsTable.languageCode]
-            it[createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
-            it[createdBy] = UUID.fromString(actorId.value)
-            it[sourceDraftId] = null
-            it[sourceRevision] = null
+            it[SnapshotsTable.id] = UUID.fromString(snapshotId.value)
+            it[SnapshotsTable.documentId] = UUID.fromString(documentId.value)
+            it[SnapshotsTable.version] = expectedVersion + 1
+            it[SnapshotsTable.state] = SnapshotState.ARCHIVED.dbValue()
+            it[SnapshotsTable.title] = docRow[DocumentsTable.title]
+            it[SnapshotsTable.body] = docRow[DocumentsTable.body]
+            it[SnapshotsTable.languageCode] = docRow[DocumentsTable.languageCode]
+            it[SnapshotsTable.createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+            it[SnapshotsTable.createdBy] = UUID.fromString(actorId.value)
+            it[SnapshotsTable.sourceDraftId] = null
+            it[SnapshotsTable.sourceRevision] = null
         }
         DocumentsTable.update({ DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }) {
-            it[snapshotId] = UUID.fromString(snapshotId.value)
+            it[DocumentsTable.snapshotId] = UUID.fromString(snapshotId.value)
         }
         val auditId = AuditId.random()
         DocumentAuditsTable.insert {
-            it[id] = UUID.fromString(auditId.value)
+            it[DocumentAuditsTable.id] = UUID.fromString(auditId.value)
             it[DocumentAuditsTable.documentId] = UUID.fromString(documentId.value)
-            it[actorId] = UUID.fromString(actorId.value)
-            it[action] = DocumentAuditAction.ARCHIVE.dbValue()
+            it[DocumentAuditsTable.actorId] = UUID.fromString(actorId.value)
+            it[DocumentAuditsTable.action] = DocumentAuditAction.ARCHIVE.dbValue()
             it[DocumentAuditsTable.reason] = reason
-            it[fromState] = DocumentWorkflowState.PUBLISHED.dbValue()
-            it[toState] = DocumentWorkflowState.ARCHIVED.dbValue()
+            it[DocumentAuditsTable.fromState] = DocumentWorkflowState.PUBLISHED.dbValue()
+            it[DocumentAuditsTable.toState] = DocumentWorkflowState.ARCHIVED.dbValue()
             it[DocumentAuditsTable.snapshotId] = UUID.fromString(snapshotId.value)
             it[DocumentAuditsTable.diffSummary] = null
-            it[requestId] = null
-            it[ipFingerprint] = null
+            it[DocumentAuditsTable.requestId] = null
+            it[DocumentAuditsTable.ipFingerprint] = null
             it[DocumentAuditsTable.createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         }
         WorkflowTransitionResult(
@@ -381,11 +384,12 @@ class ExposedWorkflowRepository : WorkflowRepository {
         actorId: UserId
     ): WorkflowTransitionResult? = transaction {
         val now = Clock.System.now()
-        val snapshotRow = SnapshotsTable.select {
+        val snapshotRow = SnapshotsTable.selectAll().where {
             (SnapshotsTable.documentId eq UUID.fromString(documentId.value)) and
-                (SnapshotsTable.id eq EntityID(UUID.fromString(snapshotId.value), SnapshotsTable))
+                    (SnapshotsTable.id eq EntityID(UUID.fromString(snapshotId.value), SnapshotsTable))
         }.limit(1).firstOrNull() ?: return@transaction null
-        val priorRow = DocumentsTable.select { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
+        val priorRow = DocumentsTable.selectAll()
+            .where { DocumentsTable.id eq EntityID(UUID.fromString(documentId.value), DocumentsTable) }
             .limit(1)
             .firstOrNull() ?: return@transaction null
         val priorState = priorRow[DocumentsTable.workflowState].toWorkflowState()
@@ -403,17 +407,17 @@ class ExposedWorkflowRepository : WorkflowRepository {
         if (updated == 0) return@transaction null
         val auditId = AuditId.random()
         DocumentAuditsTable.insert {
-            it[id] = UUID.fromString(auditId.value)
+            it[DocumentAuditsTable.id] = UUID.fromString(auditId.value)
             it[DocumentAuditsTable.documentId] = UUID.fromString(documentId.value)
-            it[actorId] = UUID.fromString(actorId.value)
-            it[action] = DocumentAuditAction.REVERT.dbValue()
+            it[DocumentAuditsTable.actorId] = UUID.fromString(actorId.value)
+            it[DocumentAuditsTable.action] = DocumentAuditAction.REVERT.dbValue()
             it[DocumentAuditsTable.reason] = reason
-            it[fromState] = priorState.dbValue()
-            it[toState] = DocumentWorkflowState.DRAFT.dbValue()
+            it[DocumentAuditsTable.fromState] = priorState.dbValue()
+            it[DocumentAuditsTable.toState] = DocumentWorkflowState.DRAFT.dbValue()
             it[DocumentAuditsTable.snapshotId] = UUID.fromString(snapshotId.value)
             it[DocumentAuditsTable.diffSummary] = null
-            it[requestId] = null
-            it[ipFingerprint] = null
+            it[DocumentAuditsTable.requestId] = null
+            it[DocumentAuditsTable.ipFingerprint] = null
             it[DocumentAuditsTable.createdAt] = now.toJavaInstant().atOffset(ZoneOffset.UTC)
         }
         WorkflowTransitionResult(
@@ -426,13 +430,13 @@ class ExposedWorkflowRepository : WorkflowRepository {
     }
 
     override suspend fun addReviewComment(reviewId: ReviewId, authorId: UserId, body: String): ReviewComment? = transaction {
-        val existing = DocumentReviewsTable.select {
-            DocumentReviewsTable.id eq EntityID(UUID.fromString(reviewId.value), DocumentReviewsTable)
-        }.limit(1).firstOrNull() ?: return@transaction null
+        val existing = DocumentReviewsTable.selectAll()
+            .where { DocumentReviewsTable.id eq EntityID(UUID.fromString(reviewId.value), DocumentReviewsTable) }
+            .limit(1).firstOrNull() ?: return@transaction null
         val now = Clock.System.now()
         val commentId = ReviewCommentId.random()
         ReviewCommentsTable.insert {
-            it[id] = UUID.fromString(commentId.value)
+            it[ReviewCommentsTable.id] = UUID.fromString(commentId.value)
             it[ReviewCommentsTable.reviewId] = UUID.fromString(reviewId.value)
             it[ReviewCommentsTable.authorId] = UUID.fromString(authorId.value)
             it[ReviewCommentsTable.body] = body

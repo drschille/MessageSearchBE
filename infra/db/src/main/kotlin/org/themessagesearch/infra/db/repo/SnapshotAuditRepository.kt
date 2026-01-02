@@ -6,8 +6,8 @@ import kotlinx.datetime.toKotlinInstant
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.themessagesearch.core.model.*
 import org.themessagesearch.core.ports.AuditRepository
@@ -44,25 +44,25 @@ object DocumentAuditsTable : UUIDTable("document_audits", "audit_id") {
 
 class ExposedSnapshotRepository : SnapshotRepository {
     override suspend fun create(snapshot: Snapshot): Snapshot = transaction {
-        SnapshotsTable.insert {
-            it[id] = UUID.fromString(snapshot.snapshotId.value)
-            it[documentId] = UUID.fromString(snapshot.documentId.value)
-            it[version] = snapshot.version
-            it[state] = snapshot.state.dbValue()
-            it[title] = snapshot.title
-            it[body] = snapshot.body
-            it[languageCode] = snapshot.languageCode
-            it[createdAt] = snapshot.createdAt.toJavaInstant().atOffset(ZoneOffset.UTC)
-            it[createdBy] = UUID.fromString(snapshot.createdBy.value)
-            it[sourceDraftId] = snapshot.sourceDraftId?.let { UUID.fromString(it) }
-            it[sourceRevision] = snapshot.sourceRevision
+        SnapshotsTable.insert { it ->
+            it[SnapshotsTable.id] = UUID.fromString(snapshot.snapshotId.value)
+            it[SnapshotsTable.documentId] = UUID.fromString(snapshot.documentId.value)
+            it[SnapshotsTable.version] = snapshot.version
+            it[SnapshotsTable.state] = snapshot.state.dbValue()
+            it[SnapshotsTable.title] = snapshot.title
+            it[SnapshotsTable.body] = snapshot.body
+            it[SnapshotsTable.languageCode] = snapshot.languageCode
+            it[SnapshotsTable.createdAt] = snapshot.createdAt.toJavaInstant().atOffset(ZoneOffset.UTC)
+            it[SnapshotsTable.createdBy] = UUID.fromString(snapshot.createdBy.value)
+            it[SnapshotsTable.sourceDraftId] = snapshot.sourceDraftId?.let { id -> UUID.fromString(id) }
+            it[SnapshotsTable.sourceRevision] = snapshot.sourceRevision
         }
         snapshot
     }
 
     override suspend fun list(documentId: DocumentId, limit: Int, cursor: String?): SnapshotListResult = transaction {
         val parsedCursor = cursor?.let { parseCursor(it) }
-        val base = SnapshotsTable.select { SnapshotsTable.documentId eq UUID.fromString(documentId.value) }
+        val base = SnapshotsTable.selectAll().where { SnapshotsTable.documentId eq UUID.fromString(documentId.value) }
         if (parsedCursor != null) {
             val cursorEntity = EntityID(parsedCursor.snapshotId, SnapshotsTable)
             base.andWhere {
@@ -87,9 +87,9 @@ class ExposedSnapshotRepository : SnapshotRepository {
     }
 
     override suspend fun findById(documentId: DocumentId, snapshotId: SnapshotId): Snapshot? = transaction {
-        val row = SnapshotsTable.select {
+        val row = SnapshotsTable.selectAll().where {
             (SnapshotsTable.documentId eq UUID.fromString(documentId.value)) and
-                (SnapshotsTable.id eq EntityID(UUID.fromString(snapshotId.value), SnapshotsTable))
+                    (SnapshotsTable.id eq EntityID(UUID.fromString(snapshotId.value), SnapshotsTable))
         }.limit(1).firstOrNull() ?: return@transaction null
         row.toSnapshot()
     }
@@ -117,7 +117,7 @@ class ExposedSnapshotRepository : SnapshotRepository {
     }
 
     private fun formatCursor(createdAt: Instant, snapshotId: UUID): String =
-        "${createdAt.toString()}|${snapshotId}"
+        "$createdAt|${snapshotId}"
 
     private data class ParsedCursor(val createdAt: java.time.OffsetDateTime, val snapshotId: UUID)
 }
@@ -125,25 +125,26 @@ class ExposedSnapshotRepository : SnapshotRepository {
 class ExposedAuditRepository : AuditRepository {
     override suspend fun create(event: DocumentAuditEvent): DocumentAuditEvent = transaction {
         DocumentAuditsTable.insert {
-            it[id] = UUID.fromString(event.auditId.value)
-            it[documentId] = UUID.fromString(event.documentId.value)
-            it[actorId] = UUID.fromString(event.actorId.value)
-            it[action] = event.action.dbValue()
-            it[reason] = event.reason
-            it[fromState] = event.fromState?.dbValue()
-            it[toState] = event.toState?.dbValue()
-            it[snapshotId] = event.snapshotId?.let { id -> UUID.fromString(id.value) }
-            it[diffSummary] = event.diffSummary
-            it[requestId] = event.requestId
-            it[ipFingerprint] = event.ipFingerprint
-            it[createdAt] = event.createdAt.toJavaInstant().atOffset(ZoneOffset.UTC)
+            it[DocumentAuditsTable.id] = UUID.fromString(event.auditId.value)
+            it[DocumentAuditsTable.documentId] = UUID.fromString(event.documentId.value)
+            it[DocumentAuditsTable.actorId] = UUID.fromString(event.actorId.value)
+            it[DocumentAuditsTable.action] = event.action.dbValue()
+            it[DocumentAuditsTable.reason] = event.reason
+            it[DocumentAuditsTable.fromState] = event.fromState?.dbValue()
+            it[DocumentAuditsTable.toState] = event.toState?.dbValue()
+            it[DocumentAuditsTable.snapshotId] = event.snapshotId?.let { id -> UUID.fromString(id.value) }
+            it[DocumentAuditsTable.diffSummary] = event.diffSummary
+            it[DocumentAuditsTable.requestId] = event.requestId
+            it[DocumentAuditsTable.ipFingerprint] = event.ipFingerprint
+            it[DocumentAuditsTable.createdAt] = event.createdAt.toJavaInstant().atOffset(ZoneOffset.UTC)
         }
         event
     }
 
     override suspend fun list(documentId: DocumentId, limit: Int, cursor: String?): DocumentAuditListResult = transaction {
         val parsedCursor = cursor?.let { parseCursor(it) }
-        val base = DocumentAuditsTable.select { DocumentAuditsTable.documentId eq UUID.fromString(documentId.value) }
+        val base = DocumentAuditsTable.selectAll()
+            .where { DocumentAuditsTable.documentId eq UUID.fromString(documentId.value) }
         if (parsedCursor != null) {
             val cursorEntity = EntityID(parsedCursor.auditId, DocumentAuditsTable)
             base.andWhere {
@@ -168,9 +169,9 @@ class ExposedAuditRepository : AuditRepository {
     }
 
     override suspend fun findById(documentId: DocumentId, auditId: AuditId): DocumentAuditEvent? = transaction {
-        val row = DocumentAuditsTable.select {
+        val row = DocumentAuditsTable.selectAll().where {
             (DocumentAuditsTable.documentId eq UUID.fromString(documentId.value)) and
-                (DocumentAuditsTable.id eq EntityID(UUID.fromString(auditId.value), DocumentAuditsTable))
+                    (DocumentAuditsTable.id eq EntityID(UUID.fromString(auditId.value), DocumentAuditsTable))
         }.limit(1).firstOrNull() ?: return@transaction null
         row.toAuditEvent()
     }
@@ -199,7 +200,7 @@ class ExposedAuditRepository : AuditRepository {
     }
 
     private fun formatCursor(createdAt: Instant, auditId: UUID): String =
-        "${createdAt.toString()}|${auditId}"
+        "$createdAt|${auditId}"
 
     private data class ParsedCursor(val createdAt: java.time.OffsetDateTime, val auditId: UUID)
 }
@@ -217,6 +218,17 @@ private fun DocumentWorkflowState.dbValue(): String = when (this) {
     DocumentWorkflowState.IN_REVIEW -> "in_review"
     DocumentWorkflowState.PUBLISHED -> "published"
     DocumentWorkflowState.ARCHIVED -> "archived"
+}
+
+private fun String.toSnapshotState(): SnapshotState = when (this) {
+    "published" -> SnapshotState.PUBLISHED
+    "archived" -> SnapshotState.ARCHIVED
+    else -> error("Unknown snapshot state $this")
+}
+
+private fun SnapshotState.dbValue(): String = when (this) {
+    SnapshotState.PUBLISHED -> "published"
+    SnapshotState.ARCHIVED -> "archived"
 }
 
 private fun String.toDocumentAuditAction(): DocumentAuditAction = when (this) {

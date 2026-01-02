@@ -1,0 +1,13 @@
+**/.DS_Store
+**/.idea
+**/.vscode
+**/.gradle
+**/build
+**/out
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/*.iml
+.git
+.gitignore

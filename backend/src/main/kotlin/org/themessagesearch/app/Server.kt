@@ -28,7 +28,12 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.server.plugins.callloging.*
 import io.ktor.server.plugins.statuspages.*
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.plus
+import org.mindrot.jbcrypt.BCrypt
 import java.net.URI
+import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
 
@@ -98,6 +103,8 @@ fun Application.ktorModule(appConfig: AppConfig, services: ServiceRegistry.Regis
         get("/health") { call.respond(mapOf("status" to "ok")) }
         get("/metrics") { call.respond(prometheusRegistry.scrape()) }
         get("/openapi") { call.respond(services.openApiSpec.toJsonElement()) }
+
+        authRoutes(services.userRepo, appConfig.jwt)
 
         authenticate("auth-jwt") {
             documentRoutes(services.documentRepo)
@@ -616,6 +623,25 @@ private fun Route.userRoutes(userRepo: UserRepository) {
         call.respond(updated.toResponse())
     }
 
+    patch("/v1/users/{id}/password") {
+        val auth = call.requireAuthContext() ?: return@patch
+        val idParam = call.parameters["id"] ?: return@patch call.respond(HttpStatusCode.BadRequest)
+        val userId = runCatching { UserId(idParam) }.getOrElse {
+            return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid user id"))
+        }
+        if (auth.userId != userId && !auth.hasRole(UserRole.ADMIN)) {
+            return@patch call.respond(HttpStatusCode.Forbidden, mapOf("error" to "forbidden"))
+        }
+        val req = call.receive<UserPasswordUpdateRequest>()
+        val error = validatePassword(req.password)
+        if (error != null) {
+            return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to error))
+        }
+        val hash = BCrypt.hashpw(req.password, BCrypt.gensalt())
+        val updated = userRepo.setPassword(userId, hash) ?: return@patch call.respond(HttpStatusCode.NotFound)
+        call.respond(updated.toResponse())
+    }
+
     delete("/v1/users/{id}") {
         val auth = call.requireAuthContext() ?: return@delete
         if (!call.requireAnyRole(auth, UserRole.ADMIN)) return@delete
@@ -648,6 +674,116 @@ private fun Route.userRoutes(userRepo: UserRepository) {
         }
         call.respond(UserAuditListResponse(result.items, result.nextCursor))
     }
+}
+
+private fun Route.authRoutes(userRepo: UserRepository, jwtCfg: JwtConfig) {
+    post("/v1/auth/register") {
+        val req = call.receive<UserRegisterRequest>()
+        val email = req.email.trim()
+        if (email.isBlank()) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "email is required"))
+        }
+        val error = validatePassword(req.password)
+        if (error != null) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to error))
+        }
+        val existing = userRepo.findByEmail(email)
+        if (existing != null) {
+            return@post call.respond(HttpStatusCode.Conflict, mapOf("error" to "user already exists"))
+        }
+        val hash = BCrypt.hashpw(req.password, BCrypt.gensalt())
+        val created = userRepo.createUserWithPassword(
+            request = req.copy(email = email, displayName = req.displayName?.trim()?.ifBlank { null }),
+            passwordHash = hash
+        ) ?: return@post call.respond(HttpStatusCode.Conflict, mapOf("error" to "user already exists"))
+        val token = issueJwt(jwtCfg, created)
+        call.respond(HttpStatusCode.Created, UserAuthResponse(token, created.toResponse()))
+    }
+
+    post("/v1/auth/login") {
+        val req = call.receive<UserLoginRequest>()
+        val email = req.email.trim()
+        if (email.isBlank()) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "email is required"))
+        }
+        val record = userRepo.findAuthByEmail(email)
+            ?: return@post call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "invalid credentials"))
+        if (record.profile.status != UserStatus.ACTIVE) {
+            return@post call.respond(HttpStatusCode.Forbidden, mapOf("error" to "user is disabled"))
+        }
+        if (!BCrypt.checkpw(req.password, record.passwordHash)) {
+            return@post call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "invalid credentials"))
+        }
+        val token = issueJwt(jwtCfg, record.profile)
+        call.respond(UserAuthResponse(token, record.profile.toResponse()))
+    }
+
+    post("/v1/auth/password-reset") {
+        val req = call.receive<PasswordResetRequest>()
+        val email = req.email.trim()
+        if (email.isBlank()) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "email is required"))
+        }
+        val user = userRepo.findByEmail(email)
+        if (user != null && user.status == UserStatus.ACTIVE) {
+            val now = Clock.System.now()
+            val expiresAt = now.plus(1, DateTimeUnit.HOUR)
+            val token = generateResetToken()
+            val tokenHash = hashToken(token)
+            userRepo.createPasswordReset(user.id, tokenHash, expiresAt)
+            return@post call.respond(
+                HttpStatusCode.Accepted,
+                PasswordResetResponse(resetToken = token, expiresAt = expiresAt)
+            )
+        }
+        call.respond(HttpStatusCode.Accepted, PasswordResetResponse())
+    }
+
+    post("/v1/auth/password-reset/confirm") {
+        val req = call.receive<PasswordResetConfirmRequest>()
+        val error = validatePassword(req.password)
+        if (error != null) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to error))
+        }
+        val tokenHash = hashToken(req.token)
+        val newHash = BCrypt.hashpw(req.password, BCrypt.gensalt())
+        val profile = userRepo.resetPasswordWithToken(tokenHash, newHash)
+            ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid or expired token"))
+        val token = issueJwt(jwtCfg, profile)
+        call.respond(UserAuthResponse(token, profile.toResponse()))
+    }
+}
+
+private fun issueJwt(cfg: JwtConfig, profile: UserProfile): String {
+    val algorithm = Algorithm.HMAC256(cfg.secret)
+    val roleClaims = profile.roles.map { it.toTokenValue() }
+    return JWT.create()
+        .withIssuer(cfg.issuer)
+        .withAudience(cfg.audience)
+        .withSubject(profile.id.value)
+        .withClaim("roles", roleClaims)
+        .sign(algorithm)
+}
+
+private fun generateResetToken(): String =
+    UUID.randomUUID().toString().replace("-", "")
+
+private fun hashToken(token: String): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(token.toByteArray())
+    return digest.joinToString("") { "%02x".format(it) }
+}
+
+private fun validatePassword(password: String): String? {
+    if (password.length < 8) return "password must be at least 8 characters"
+    if (password.length > 256) return "password must be at most 256 characters"
+    return null
+}
+
+private fun UserRole.toTokenValue(): String = when (this) {
+    UserRole.READER -> "reader"
+    UserRole.EDITOR -> "editor"
+    UserRole.REVIEWER -> "reviewer"
+    UserRole.ADMIN -> "admin"
 }
 
 private fun Any?.toJsonElement(): JsonElement = when (this) {

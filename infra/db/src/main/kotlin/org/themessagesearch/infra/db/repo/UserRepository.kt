@@ -18,6 +18,8 @@ private object UsersTable : UUIDTable("users") {
     val email = text("email").nullable()
     val displayName = text("display_name").nullable()
     val status = text("status")
+    val passwordHash = text("password_hash").nullable()
+    val passwordUpdatedAt = timestampWithTimeZone("password_updated_at").nullable()
     val createdAt = timestampWithTimeZone("created_at")
     val updatedAt = timestampWithTimeZone("updated_at")
 }
@@ -37,6 +39,14 @@ private object UserAuditsTable : UUIDTable("user_audits", "audit_id") {
     val createdAt = timestampWithTimeZone("created_at")
 }
 
+private object UserPasswordResetsTable : UUIDTable("user_password_resets") {
+    val userId = reference("user_id", UsersTable)
+    val tokenHash = text("token_hash")
+    val expiresAt = timestampWithTimeZone("expires_at")
+    val usedAt = timestampWithTimeZone("used_at").nullable()
+    val createdAt = timestampWithTimeZone("created_at")
+}
+
 class ExposedUserRepository : UserRepository {
     override suspend fun findById(id: UserId): UserProfile? = transaction {
         val row = UsersTable.selectAll().where { UsersTable.id eq EntityID(UUID.fromString(id.value), UsersTable) }
@@ -45,6 +55,25 @@ class ExposedUserRepository : UserRepository {
             ?: return@transaction null
         val roles = loadCurrentRoles(listOf(row[UsersTable.id].value))[row[UsersTable.id].value].orEmpty()
         row.toUser(roles)
+    }
+
+    override suspend fun findByEmail(email: String): UserProfile? = transaction {
+        val row = UsersTable.selectAll().where { UsersTable.email eq email }
+            .limit(1)
+            .firstOrNull()
+            ?: return@transaction null
+        val roles = loadCurrentRoles(listOf(row[UsersTable.id].value))[row[UsersTable.id].value].orEmpty()
+        row.toUser(roles)
+    }
+
+    override suspend fun findAuthByEmail(email: String): UserAuthRecord? = transaction {
+        val row = UsersTable.selectAll().where { UsersTable.email eq email }
+            .limit(1)
+            .firstOrNull()
+            ?: return@transaction null
+        val passwordHash = row[UsersTable.passwordHash] ?: return@transaction null
+        val roles = loadCurrentRoles(listOf(row[UsersTable.id].value))[row[UsersTable.id].value].orEmpty()
+        UserAuthRecord(row.toUser(roles), passwordHash)
     }
 
     override suspend fun findOrCreateFromAuth(
@@ -67,6 +96,8 @@ class ExposedUserRepository : UserRepository {
             it[UsersTable.email] = email
             it[UsersTable.displayName] = displayName
             it[UsersTable.status] = UserStatus.ACTIVE.dbValue()
+            it[UsersTable.passwordHash] = null
+            it[UsersTable.passwordUpdatedAt] = null
             it[UsersTable.createdAt] = offsetNow
             it[UsersTable.updatedAt] = offsetNow
         }
@@ -139,6 +170,8 @@ class ExposedUserRepository : UserRepository {
             it[UsersTable.email] = request.email
             it[UsersTable.displayName] = request.displayName
             it[UsersTable.status] = UserStatus.ACTIVE.dbValue()
+            it[UsersTable.passwordHash] = null
+            it[UsersTable.passwordUpdatedAt] = null
             it[UsersTable.createdAt] = offsetNow
             it[UsersTable.updatedAt] = offsetNow
         }
@@ -160,6 +193,112 @@ class ExposedUserRepository : UserRepository {
             status = UserStatus.ACTIVE,
             createdAt = now,
             updatedAt = now
+        )
+    }
+
+    override suspend fun createUserWithPassword(
+        request: UserRegisterRequest,
+        passwordHash: String
+    ): UserProfile? = transaction {
+        val existing = UsersTable.selectAll().where { UsersTable.email eq request.email }
+            .limit(1)
+            .firstOrNull()
+        if (existing != null) return@transaction null
+        val now = Clock.System.now()
+        val offsetNow = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+        val entityId = UsersTable.insertAndGetId {
+            it[UsersTable.id] = UUID.randomUUID()
+            it[UsersTable.email] = request.email
+            it[UsersTable.displayName] = request.displayName
+            it[UsersTable.status] = UserStatus.ACTIVE.dbValue()
+            it[UsersTable.passwordHash] = passwordHash
+            it[UsersTable.passwordUpdatedAt] = offsetNow
+            it[UsersTable.createdAt] = offsetNow
+            it[UsersTable.updatedAt] = offsetNow
+        }
+        val role = UserRole.READER
+        insertRoleBatch(entityId, entityId, offsetNow, listOf(role))
+        insertAudit(
+            auditId = UUID.randomUUID(),
+            actorId = entityId,
+            targetId = entityId,
+            action = UserAuditAction.USER_CREATED
+        )
+        UserProfile(
+            id = UserId(entityId.value.toString()),
+            email = request.email,
+            displayName = request.displayName,
+            roles = listOf(role),
+            status = UserStatus.ACTIVE,
+            createdAt = now,
+            updatedAt = now
+        )
+    }
+
+    override suspend fun setPassword(userId: UserId, passwordHash: String): UserProfile? = transaction {
+        val userEntity = EntityID(UUID.fromString(userId.value), UsersTable)
+        val row = UsersTable.selectAll().where { UsersTable.id eq userEntity }.limit(1).firstOrNull()
+            ?: return@transaction null
+        val now = Clock.System.now()
+        val offsetNow = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+        UsersTable.update({ UsersTable.id eq userEntity }) {
+            it[UsersTable.passwordHash] = passwordHash
+            it[UsersTable.passwordUpdatedAt] = offsetNow
+            it[UsersTable.updatedAt] = offsetNow
+        }
+        val roles = loadCurrentRoles(listOf(userEntity.value))[userEntity.value].orEmpty()
+        row.copy(
+            status = row[UsersTable.status].toUserStatus(),
+            updatedAt = now,
+            roles = roles
+        )
+    }
+
+    override suspend fun createPasswordReset(userId: UserId, tokenHash: String, expiresAt: Instant): Unit = transaction {
+        val offsetNow = Clock.System.now().toJavaInstant().atOffset(ZoneOffset.UTC)
+        val offsetExpires = expiresAt.toJavaInstant().atOffset(ZoneOffset.UTC)
+        UserPasswordResetsTable.insert {
+            it[id] = UUID.randomUUID()
+            it[UserPasswordResetsTable.userId] = EntityID(UUID.fromString(userId.value), UsersTable)
+            it[UserPasswordResetsTable.tokenHash] = tokenHash
+            it[UserPasswordResetsTable.expiresAt] = offsetExpires
+            it[UserPasswordResetsTable.usedAt] = null
+            it[UserPasswordResetsTable.createdAt] = offsetNow
+        }
+    }
+
+    override suspend fun resetPasswordWithToken(tokenHash: String, newPasswordHash: String): UserProfile? = transaction {
+        val now = Clock.System.now()
+        val offsetNow = now.toJavaInstant().atOffset(ZoneOffset.UTC)
+        val resetRow = UserPasswordResetsTable
+            .selectAll()
+            .where {
+                (UserPasswordResetsTable.tokenHash eq tokenHash) and
+                    UserPasswordResetsTable.usedAt.isNull() and
+                    (UserPasswordResetsTable.expiresAt greater offsetNow)
+            }
+            .limit(1)
+            .firstOrNull()
+            ?: return@transaction null
+        val userEntity = resetRow[UserPasswordResetsTable.userId]
+        val userRow = UsersTable.selectAll().where { UsersTable.id eq userEntity }.limit(1).firstOrNull()
+            ?: return@transaction null
+        if (userRow[UsersTable.status].toUserStatus() != UserStatus.ACTIVE) {
+            return@transaction null
+        }
+        UserPasswordResetsTable.update({ UserPasswordResetsTable.id eq resetRow[UserPasswordResetsTable.id] }) {
+            it[usedAt] = offsetNow
+        }
+        UsersTable.update({ UsersTable.id eq userEntity }) {
+            it[UsersTable.passwordHash] = newPasswordHash
+            it[UsersTable.passwordUpdatedAt] = offsetNow
+            it[UsersTable.updatedAt] = offsetNow
+        }
+        val roles = loadCurrentRoles(listOf(userEntity.value))[userEntity.value].orEmpty()
+        userRow.copy(
+            status = userRow[UsersTable.status].toUserStatus(),
+            updatedAt = now,
+            roles = roles
         )
     }
 

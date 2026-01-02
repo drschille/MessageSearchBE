@@ -39,8 +39,8 @@ object ConfigLoader {
         fun env(name: String, default: String? = null): String? = System.getenv(name) ?: default
 
         val dbCfg = DatabaseFactory.DbConfig(
-            url = dbMap["url"].toString(),
-            user = dbMap["user"].toString(),
+            url = env("DB_URL", dbMap["url"].toString())!!,
+            user = env("DB_USER", dbMap["user"].toString())!!,
             password = env("DB_PASSWORD", dbMap["password"].toString())!!
         )
         val jwtCfg = JwtConfig(

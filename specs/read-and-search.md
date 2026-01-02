@@ -182,6 +182,12 @@ The service unwraps `total` and `results`, ensuring API responses carry overall 
   - `EmbeddingClient.embed(texts: List<String>): List<FloatArray>`
   - `ChatClient.generate(prompt: String, context: List<String>): String`
 - Implementations: OpenAI/Azure/OpenRouter; injectable via configuration. Provide deterministic stub for tests.
+- OpenAI default models: embeddings `text-embedding-3-small` (1536 dims) and chat `gpt-4o-mini`, both overrideable per environment.
+
+### 7.1 AI Assist Prompts
+- Support mode-specific prompts for grammar checks, semantic consistency, and translation audits.
+- Each response should include brief findings plus citations back to document/paragraph IDs.
+- Always include a system prompt that enforces non-destructive advice and avoids rewriting content unless explicitly requested.
 
 ## 8. Performance & Observability
 - Target: `POST /v1/search` p95 < 150ms for 50k documents on warm cache; log vector index settings for transparency.

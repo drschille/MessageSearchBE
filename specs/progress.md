@@ -16,6 +16,12 @@ Status is a quick snapshot and may lag behind active work.
 - [ ] Full OpenAPI coverage for all endpoints
 - [ ] Real AI providers (embeddings + chat) configurable by `application.yaml`
 
+## AI Assist
+- [ ] OpenAI-backed embeddings + chat client implementations
+- [ ] Prompt templates for grammar, semantics, and translation audits
+- [ ] Snapshot-aware context packaging and citations for AI replies
+- [ ] Token accounting + prompt/response redaction in logs and metrics
+
 ## Editorial Workflow
 - [x] Workflow state model + persistence (Draft/InReview/Published/Archived)
 - [x] Transition endpoints (submit, approve, request changes, publish, archive, revert)

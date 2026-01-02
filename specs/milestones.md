@@ -35,6 +35,6 @@ Effort key: S = 0.5–2 days, M = 3–5 days, L = 6–10 days, XL = 2+ weeks.
 - [ ] Idempotency-Key support for mutating endpoints (M)
 - [ ] ETag/If-Match handling on writes (M)
 - [ ] Rate limiting per token/IP (M)
-- [ ] Replace AI stubs with provider-backed clients (M)
+- [ ] OpenAI-backed embeddings + chat clients with prompt templates (M)
 - [ ] OpenAPI coverage for current endpoints (S–M)
 - [ ] End-to-end tests for workflow/snapshot/audit flows (L)

@@ -56,8 +56,18 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
-          source: "docker-compose.prod.yml,infra/db/src/main/resources/db/migration"
+          source: "docker-compose.prod.yml,infra/db/src/main/resources/db/migration,deploy/nginx.conf"
           target: ${{ secrets.SERVER_APP_DIR }}
+
+      - name: Log in to GHCR on server
+        if: ${{ secrets.GHCR_TOKEN != '' }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3

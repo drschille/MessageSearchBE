@@ -23,6 +23,7 @@ dependencies {
     implementation(libs.micrometerRegistryPrometheus)
     implementation(libs.snakeYaml)
     implementation(libs.javaJwt)
+    implementation(libs.bcrypt)
     testImplementation(kotlin("test"))
     testImplementation(libs.ktorServerTests)
 }

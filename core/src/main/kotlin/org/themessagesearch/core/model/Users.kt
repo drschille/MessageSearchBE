@@ -72,6 +72,28 @@ data class UserCreateRequest(
 )
 
 @Serializable
+data class UserRegisterRequest(
+    val email: String,
+    val password: String,
+    val displayName: String? = null
+)
+
+@Serializable
+data class UserLoginRequest(
+    val email: String,
+    val password: String
+)
+
+@Serializable
+data class UserPasswordUpdateRequest(val password: String)
+
+@Serializable
+data class UserAuthResponse(
+    val token: String,
+    val user: UserProfileResponse
+)
+
+@Serializable
 data class UserUpdateRolesRequest(val roles: List<UserRole>, val reason: String)
 
 @Serializable
@@ -122,6 +144,11 @@ data class UserAuditListResponse(
 data class UserAuditListResult(
     val items: List<UserAuditEvent>,
     val nextCursor: String? = null
+)
+
+data class UserAuthRecord(
+    val profile: UserProfile,
+    val passwordHash: String
 )
 
 fun UserProfile.toResponse(): UserProfileResponse = UserProfileResponse(

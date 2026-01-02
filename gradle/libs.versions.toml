@@ -17,6 +17,7 @@ testcontainers = "1.20.1"
 snakeyaml = "2.3"
 javaJwt = "4.4.0"
 micrometerPrometheus = "1.12.6"
+bcrypt = "0.4"
 
 [libraries]
 kotlinGradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
@@ -49,6 +50,7 @@ hikariCP = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
 micrometerRegistryPrometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometerPrometheus" }
 snakeYaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 javaJwt = { module = "com.auth0:java-jwt", version.ref = "javaJwt" }
+bcrypt = { module = "org.mindrot:jbcrypt", version.ref = "bcrypt" }
 # Test
 ktorServerTests = { module = "io.ktor:ktor-server-tests-jvm", version.ref = "ktor" }
 testcontainersPostgres = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }

@@ -27,6 +27,7 @@ Effort key: S = 0.5–2 days, M = 3–5 days, L = 6–10 days, XL = 2+ weeks.
 
 ## M3 - Collaboration Realtime
 - [ ] WebSocket realtime sync for collab updates (L)
+- [ ] CRDT engine implementation + merge semantics (L)
 - [ ] Collab paragraph metadata management (S–M)
 - [ ] Snapshot/compaction policy + retention (M)
 - [ ] State-vector-based incremental sync (M)

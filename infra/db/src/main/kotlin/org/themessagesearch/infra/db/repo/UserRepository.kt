@@ -7,16 +7,12 @@ import kotlinx.datetime.toKotlinInstant
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
-import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.themessagesearch.core.model.*
 import org.themessagesearch.core.ports.UserRepository
 import java.time.ZoneOffset
-import java.util.UUID
+import java.util.*
 
 private object UsersTable : UUIDTable("users") {
     val email = text("email").nullable()
@@ -216,7 +212,6 @@ class ExposedUserRepository : UserRepository {
         )
         val roles = loadCurrentRoles(listOf(userEntity.value))[userEntity.value].orEmpty()
         row.copy(
-            row = row,
             status = status,
             updatedAt = now,
             roles = roles
@@ -243,7 +238,6 @@ class ExposedUserRepository : UserRepository {
         )
         val roles = loadCurrentRoles(listOf(userEntity.value))[userEntity.value].orEmpty()
         row.copy(
-            row = row,
             status = UserStatus.DELETED,
             updatedAt = now,
             roles = roles
@@ -342,17 +336,16 @@ class ExposedUserRepository : UserRepository {
     )
 
     private fun ResultRow.copy(
-        row: ResultRow,
         status: UserStatus,
         updatedAt: Instant,
         roles: List<UserRole>
     ): UserProfile = UserProfile(
-        id = UserId(row[UsersTable.id].value.toString()),
-        email = row[UsersTable.email],
-        displayName = row[UsersTable.displayName],
+        id = UserId(this[UsersTable.id].value.toString()),
+        email = this[UsersTable.email],
+        displayName = this[UsersTable.displayName],
         roles = roles,
         status = status,
-        createdAt = row[UsersTable.createdAt].toInstant().toKotlinInstant(),
+        createdAt = this[UsersTable.createdAt].toInstant().toKotlinInstant(),
         updatedAt = updatedAt
     )
 
@@ -374,7 +367,7 @@ class ExposedUserRepository : UserRepository {
     }
 
     private fun formatCursor(createdAt: Instant, userId: UUID): String =
-        "${createdAt.toString()}|${userId}"
+        "$createdAt|${userId}"
 
     private data class ParsedCursor(val createdAt: java.time.OffsetDateTime, val userId: UUID)
 }

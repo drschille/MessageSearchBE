@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
 type User = {
@@ -46,7 +46,7 @@ export default function AdminUsersPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<string | null>(null);
 
-  const loadUsers = async (options?: {
+  const loadUsers = useCallback(async (options?: {
     preserve?: boolean;
     cursor?: string | null;
     append?: boolean;
@@ -88,11 +88,11 @@ export default function AdminUsersPage() {
         setLoading(false);
       }
     }
-  };
+  }, [showDeleted]);
 
   useEffect(() => {
     void loadUsers();
-  }, [showDeleted]);
+  }, [loadUsers]);
 
   const submitCreateUser = async () => {
     setSubmitStatus(null);
@@ -275,7 +275,7 @@ export default function AdminUsersPage() {
                 />
                 Show deleted
               </label>
-              <button className="button secondary" onClick={loadUsers}>
+              <button className="button secondary" onClick={() => void loadUsers()}>
                 Refresh
               </button>
             </div>

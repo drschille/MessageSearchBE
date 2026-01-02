@@ -132,6 +132,8 @@ interface UserRepository {
     suspend fun createUserWithPassword(request: UserRegisterRequest, passwordHash: String): UserProfile?
     suspend fun replaceRoles(userId: UserId, roles: List<UserRole>, actorId: UserId, reason: String): UserProfile?
     suspend fun setPassword(userId: UserId, passwordHash: String): UserProfile?
+    suspend fun createPasswordReset(userId: UserId, tokenHash: String, expiresAt: kotlinx.datetime.Instant)
+    suspend fun resetPasswordWithToken(tokenHash: String, newPasswordHash: String): UserProfile?
     suspend fun updateStatus(userId: UserId, status: UserStatus, actorId: UserId, reason: String): UserProfile?
     suspend fun deleteUser(userId: UserId, actorId: UserId, reason: String): UserProfile?
     suspend fun listAudits(userId: UserId, limit: Int, cursor: String?): UserAuditListResult

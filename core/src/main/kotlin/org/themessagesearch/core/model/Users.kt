@@ -85,6 +85,21 @@ data class UserLoginRequest(
 )
 
 @Serializable
+data class PasswordResetRequest(val email: String)
+
+@Serializable
+data class PasswordResetConfirmRequest(
+    val token: String,
+    val password: String
+)
+
+@Serializable
+data class PasswordResetResponse(
+    val resetToken: String? = null,
+    val expiresAt: Instant? = null
+)
+
+@Serializable
 data class UserPasswordUpdateRequest(val password: String)
 
 @Serializable

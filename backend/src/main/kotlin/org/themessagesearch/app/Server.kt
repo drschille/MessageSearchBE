@@ -28,8 +28,12 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.server.plugins.callloging.*
 import io.ktor.server.plugins.statuspages.*
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.plus
 import org.mindrot.jbcrypt.BCrypt
 import java.net.URI
+import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
 
@@ -713,6 +717,41 @@ private fun Route.authRoutes(userRepo: UserRepository, jwtCfg: JwtConfig) {
         val token = issueJwt(jwtCfg, record.profile)
         call.respond(UserAuthResponse(token, record.profile.toResponse()))
     }
+
+    post("/v1/auth/password-reset") {
+        val req = call.receive<PasswordResetRequest>()
+        val email = req.email.trim()
+        if (email.isBlank()) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "email is required"))
+        }
+        val user = userRepo.findByEmail(email)
+        if (user != null && user.status == UserStatus.ACTIVE) {
+            val now = Clock.System.now()
+            val expiresAt = now.plus(1, DateTimeUnit.HOUR)
+            val token = generateResetToken()
+            val tokenHash = hashToken(token)
+            userRepo.createPasswordReset(user.id, tokenHash, expiresAt)
+            return@post call.respond(
+                HttpStatusCode.Accepted,
+                PasswordResetResponse(resetToken = token, expiresAt = expiresAt)
+            )
+        }
+        call.respond(HttpStatusCode.Accepted, PasswordResetResponse())
+    }
+
+    post("/v1/auth/password-reset/confirm") {
+        val req = call.receive<PasswordResetConfirmRequest>()
+        val error = validatePassword(req.password)
+        if (error != null) {
+            return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to error))
+        }
+        val tokenHash = hashToken(req.token)
+        val newHash = BCrypt.hashpw(req.password, BCrypt.gensalt())
+        val profile = userRepo.resetPasswordWithToken(tokenHash, newHash)
+            ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid or expired token"))
+        val token = issueJwt(jwtCfg, profile)
+        call.respond(UserAuthResponse(token, profile.toResponse()))
+    }
 }
 
 private fun issueJwt(cfg: JwtConfig, profile: UserProfile): String {
@@ -724,6 +763,14 @@ private fun issueJwt(cfg: JwtConfig, profile: UserProfile): String {
         .withSubject(profile.id.value)
         .withClaim("roles", roleClaims)
         .sign(algorithm)
+}
+
+private fun generateResetToken(): String =
+    UUID.randomUUID().toString().replace("-", "")
+
+private fun hashToken(token: String): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(token.toByteArray())
+    return digest.joinToString("") { "%02x".format(it) }
 }
 
 private fun validatePassword(password: String): String? {

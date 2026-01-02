@@ -125,9 +125,10 @@ interface CollaborationRepository {
 interface UserRepository {
     suspend fun findById(id: UserId): UserProfile?
     suspend fun findOrCreateFromAuth(id: UserId, roles: List<UserRole>, email: String?, displayName: String?): UserProfile
-    suspend fun listUsers(limit: Int, cursor: String?): UserListResult
+    suspend fun listUsers(limit: Int, cursor: String?, includeDeleted: Boolean = false): UserListResult
     suspend fun createUser(request: UserCreateRequest, actorId: UserId): UserProfile?
     suspend fun replaceRoles(userId: UserId, roles: List<UserRole>, actorId: UserId, reason: String): UserProfile?
     suspend fun updateStatus(userId: UserId, status: UserStatus, actorId: UserId, reason: String): UserProfile?
+    suspend fun deleteUser(userId: UserId, actorId: UserId, reason: String): UserProfile?
     suspend fun listAudits(userId: UserId, limit: Int, cursor: String?): UserAuditListResult
 }

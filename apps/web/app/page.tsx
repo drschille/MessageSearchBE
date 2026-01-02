@@ -23,6 +23,10 @@ export default function Home() {
           This project is scaffolded. Connect the API client, then build the
           search and editorial flows defined in apps/web/SPEC.md.
         </p>
+        <p>
+          Admins can start with the user management panel at{" "}
+          <a href="/admin/users">/admin/users</a>.
+        </p>
         <div className="grid">
           {featureCards.map((card) => (
             <section className="card" key={card.title}>

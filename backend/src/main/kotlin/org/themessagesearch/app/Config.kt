@@ -11,12 +11,15 @@ data class AiConfig(val provider: String, val apiKey: String?)
 
 data class SearchConfig(val k: Int, val weights: HybridWeights)
 
+data class CorsConfig(val allowedOrigins: List<String>, val allowCredentials: Boolean)
+
 data class AppConfig(
     val db: DatabaseFactory.DbConfig,
     val jwt: JwtConfig,
     val ai: AiConfig,
     val search: SearchConfig,
-    val webhooks: WebhookConfig
+    val webhooks: WebhookConfig,
+    val cors: CorsConfig
 )
 
 object ConfigLoader {
@@ -31,6 +34,7 @@ object ConfigLoader {
         val searchMap = yaml["search"] as Map<String, Any?>
         val weightsMap = searchMap["weights"] as Map<String, Any?>
         val webhookMap = yaml["webhooks"] as? Map<String, Any?> ?: emptyMap()
+        val corsMap = yaml["cors"] as? Map<String, Any?> ?: emptyMap()
 
         fun env(name: String, default: String? = null): String? = System.getenv(name) ?: default
 
@@ -59,6 +63,22 @@ object ConfigLoader {
             reviewSubmittedUrl = webhookMap["reviewSubmittedUrl"]?.toString(),
             documentPublishedUrl = webhookMap["documentPublishedUrl"]?.toString()
         )
-        return AppConfig(db = dbCfg, jwt = jwtCfg, ai = aiCfg, search = searchCfg, webhooks = webhooksCfg)
+        val allowedOrigins = env("CORS_ALLOWED_ORIGINS")?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?: (corsMap["allowedOrigins"] as? List<*>)?.mapNotNull { it?.toString() }
+            ?: emptyList()
+        val corsCfg = CorsConfig(
+            allowedOrigins = allowedOrigins,
+            allowCredentials = corsMap["allowCredentials"]?.toString()?.toBooleanStrictOrNull() ?: false
+        )
+        return AppConfig(
+            db = dbCfg,
+            jwt = jwtCfg,
+            ai = aiCfg,
+            search = searchCfg,
+            webhooks = webhooksCfg,
+            cors = corsCfg
+        )
     }
 }

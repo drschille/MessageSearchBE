@@ -4,6 +4,7 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.cors.routing.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
@@ -27,6 +28,7 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.server.plugins.callloging.*
 import io.ktor.server.plugins.statuspages.*
+import java.net.URI
 import java.util.Base64
 import java.util.UUID
 
@@ -38,6 +40,27 @@ fun main() {
 
 fun Application.ktorModule(appConfig: AppConfig, services: ServiceRegistry.Registry) {
     install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; prettyPrint = false }) }
+    install(CORS) {
+        val allowedOrigins = appConfig.cors.allowedOrigins
+        allowedOrigins.forEach { origin ->
+            val uri = runCatching { URI(origin) }.getOrNull() ?: return@forEach
+            val host = uri.host ?: return@forEach
+            val schemes = if (uri.scheme.isNullOrBlank()) listOf("http", "https") else listOf(uri.scheme)
+            val hostValue = if (uri.port > 0) "${host}:${uri.port}" else host
+            allowHost(hostValue, schemes = schemes)
+        }
+        allowMethod(HttpMethod.Options)
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Put)
+        allowMethod(HttpMethod.Patch)
+        allowMethod(HttpMethod.Delete)
+        allowHeader(HttpHeaders.Authorization)
+        allowHeader(HttpHeaders.ContentType)
+        if (appConfig.cors.allowCredentials) {
+            allowCredentials = true
+        }
+    }
     install(CallLogging) {
         filter { call -> call.request.path() != "/health" && call.request.path() != "/metrics" }
     }
@@ -522,7 +545,8 @@ private fun Route.userRoutes(userRepo: UserRepository) {
         userRepo.findOrCreateFromAuth(auth.userId, auth.roles.toList(), email = null, displayName = null)
         val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 200) ?: 50
         val cursor = call.request.queryParameters["cursor"]
-        val result = runCatching { userRepo.listUsers(limit, cursor) }.getOrElse {
+        val includeDeleted = call.request.queryParameters["include_deleted"]?.toBooleanStrictOrNull() ?: false
+        val result = runCatching { userRepo.listUsers(limit, cursor, includeDeleted) }.getOrElse {
             return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid cursor"))
         }
         call.respond(UserListResponse(result.items.map { it.toResponse() }, result.nextCursor))
@@ -589,6 +613,23 @@ private fun Route.userRoutes(userRepo: UserRepository) {
         }
         val updated = userRepo.updateStatus(userId, req.status, auth.userId, req.reason)
             ?: return@patch call.respond(HttpStatusCode.NotFound)
+        call.respond(updated.toResponse())
+    }
+
+    delete("/v1/users/{id}") {
+        val auth = call.requireAuthContext() ?: return@delete
+        if (!call.requireAnyRole(auth, UserRole.ADMIN)) return@delete
+        userRepo.findOrCreateFromAuth(auth.userId, auth.roles.toList(), email = null, displayName = null)
+        val idParam = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+        val userId = runCatching { UserId(idParam) }.getOrElse {
+            return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid user id"))
+        }
+        val req = call.receive<UserDeleteRequest>()
+        if (req.reason.isBlank()) {
+            return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "reason is required"))
+        }
+        val updated = userRepo.deleteUser(userId, auth.userId, req.reason)
+            ?: return@delete call.respond(HttpStatusCode.NotFound)
         call.respond(updated.toResponse())
     }
 

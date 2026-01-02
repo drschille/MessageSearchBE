@@ -39,7 +39,9 @@ enum class UserStatus {
     @SerialName("active")
     ACTIVE,
     @SerialName("disabled")
-    DISABLED
+    DISABLED,
+    @SerialName("deleted")
+    DELETED
 }
 
 @Serializable
@@ -76,6 +78,9 @@ data class UserUpdateRolesRequest(val roles: List<UserRole>, val reason: String)
 data class UserUpdateStatusRequest(val status: UserStatus, val reason: String)
 
 @Serializable
+data class UserDeleteRequest(val reason: String)
+
+@Serializable
 data class UserListResponse(
     val items: List<UserProfileResponse>,
     val nextCursor: String? = null
@@ -93,7 +98,9 @@ enum class UserAuditAction {
     @SerialName("roles.replaced")
     ROLES_REPLACED,
     @SerialName("status.changed")
-    STATUS_CHANGED
+    STATUS_CHANGED,
+    @SerialName("user.deleted")
+    USER_DELETED
 }
 
 @Serializable

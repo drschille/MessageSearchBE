@@ -28,3 +28,9 @@ search:
 webhooks:
   reviewSubmittedUrl: ${REVIEW_SUBMITTED_WEBHOOK:}
   documentPublishedUrl: ${DOCUMENT_PUBLISHED_WEBHOOK:}
+
+cors:
+  allowedOrigins:
+    - http://localhost:3000
+    - http://localhost:3001
+  allowCredentials: false

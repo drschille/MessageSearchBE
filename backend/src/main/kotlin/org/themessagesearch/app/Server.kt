@@ -123,7 +123,7 @@ private suspend fun ApplicationCall.requireAnyRole(auth: AuthContext, vararg req
 
 private suspend fun ApplicationCall.requireIfMatchVersion(): Long? {
     val raw = request.headers[HttpHeaders.IfMatch] ?: return respond(
-        HttpStatusCode.PreconditionRequired,
+        HttpStatusCode(428, "Precondition Required"),
         mapOf("error" to "missing if-match header")
     ).let { null }
     val cleaned = raw.trim().trim('"')
